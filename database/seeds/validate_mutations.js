@@ -1,6 +1,7 @@
 const { generateWorld } = require('./generate');
 const { validateWorld } = require('./lib/validate');
 const { deterministicUuid } = require('./lib/ids');
+const { buildOrganizationPublicImpact, localCalendarDate } = require('./lib/activities');
 
 const UNKNOWN_UUID = '00000000-0000-5000-8000-000000000000';
 
@@ -22,6 +23,36 @@ function save(world, predicate = () => true) {
 
 function resetRegistrationId(row) {
   row.id = deterministicUuid('registration', `${row.userId}|${row.opportunityId}`);
+}
+
+function activity(world, predicate = () => true) {
+  return world.activities.find((row) => predicate(row));
+}
+
+function resetManualActivityId(row) {
+  row.id = deterministicUuid('activity-manual', [
+    row.userId, row.occurredOn, row.manualTitle, row.manualOrgName,
+  ].join('|'));
+}
+
+function useRegistration(world, row, registrationRow) {
+  const item = opportunity(world, (candidate) => candidate.id === registrationRow.opportunityId);
+  row.id = deterministicUuid('activity-registration', registrationRow.id);
+  row.userId = registrationRow.userId;
+  row.registrationId = registrationRow.id;
+  row.occurredOn = localCalendarDate(item.startsAt);
+  row.hours = (new Date(item.endsAt) - new Date(item.startsAt)) / 3600000;
+  row.manualTitle = null;
+  row.manualCauseId = null;
+  row.manualOrgId = null;
+  row.manualOrgName = null;
+  row.createdAt = item.endsAt;
+}
+
+function unconvertedRegistration(world, predicate = () => true) {
+  const used = new Set(world.activities.filter((row) => row.registrationId)
+    .map((row) => row.registrationId));
+  return registration(world, (row, item) => !used.has(row.id) && predicate(row, item));
 }
 
 const MUTATIONS = [
@@ -241,11 +272,185 @@ const MUTATIONS = [
     const item = opportunity(world, (candidate) => candidate.id === row.opportunityId);
     row.savedAt = item.startsAt;
   }],
+  ['wrong activity count', (world) => { world.activities.pop(); }],
+  ['wrong Kynd-manual activity split', (world) => {
+    const row = activity(world, (candidate) => candidate.registrationId === null);
+    row.registrationId = UNKNOWN_UUID;
+    row.manualTitle = null;
+    row.manualCauseId = null;
+    row.manualOrgId = null;
+    row.manualOrgName = null;
+    row.id = deterministicUuid('activity-registration', row.registrationId);
+  }],
+  ['duplicate activity ID', (world) => { world.activities[1].id = world.activities[0].id; }],
+  ['activity missing user', (world) => { world.activities[0].userId = UNKNOWN_UUID; }],
+  ['activity with zero hours', (world) => { world.activities[0].hours = 0; }],
+  ['activity with negative hours', (world) => { world.activities[0].hours = -1; }],
+  ['activity occurrence in future', (world) => { world.activities[0].occurredOn = '2026-09-01'; }],
+  ['activity created after anchor', (world) => { world.activities[0].createdAt = '2026-08-31T00:00:00.000Z'; }],
+  ['Kynd activity missing registration reference', (world) => {
+    const row = activity(world, (candidate) => candidate.registrationId !== null);
+    row.registrationId = null;
+  }],
+  ['Kynd activity references missing registration row', (world) => {
+    const row = activity(world, (candidate) => candidate.registrationId !== null);
+    row.registrationId = UNKNOWN_UUID;
+    row.id = deterministicUuid('activity-registration', UNKNOWN_UUID);
+  }],
+  ['activity user differs from registration user', (world) => {
+    const row = activity(world, (candidate) => candidate.registrationId !== null);
+    row.userId = world.users.find((user) => user.id !== row.userId).id;
+  }],
+  ['activity references cancelled registration', (world) => {
+    const row = activity(world, (candidate) => candidate.registrationId !== null);
+    const cancelled = registration(world, (candidate, item) => (
+      candidate.status === 'cancelled' && item.timeBucket === 'recent_past'
+    ));
+    useRegistration(world, row, cancelled);
+  }],
+  ['activity references upcoming opportunity', (world) => {
+    const row = activity(world, (candidate) => candidate.registrationId !== null);
+    const upcoming = unconvertedRegistration(world, (candidate, item) => (
+      candidate.status === 'joined' && item.timeBucket === 'upcoming'
+    ));
+    useRegistration(world, row, upcoming);
+  }],
+  ['activity references cancelled opportunity', (world) => {
+    const row = activity(world, (candidate) => candidate.registrationId !== null);
+    const cancelled = registration(world, (candidate, item) => item.status === 'cancelled');
+    useRegistration(world, row, cancelled);
+  }],
+  ['duplicate activities for registration', (world) => {
+    const rows = world.activities.filter((candidate) => candidate.registrationId !== null);
+    rows[1].registrationId = rows[0].registrationId;
+    rows[1].id = deterministicUuid('activity-registration', rows[0].registrationId);
+  }],
+  ['Kynd activity containing manual title', (world) => {
+    activity(world, (candidate) => candidate.registrationId !== null).manualTitle = 'Invalid title';
+  }],
+  ['Kynd activity containing manual cause', (world) => {
+    activity(world, (candidate) => candidate.registrationId !== null).manualCauseId = world.causes[0].id;
+  }],
+  ['Kynd activity containing manual organization', (world) => {
+    const row = activity(world, (candidate) => candidate.registrationId !== null);
+    row.manualOrgId = world.organizations[0].id;
+    row.manualOrgName = world.organizations[0].name;
+  }],
+  ['Kynd activity occurrence differs from opportunity date', (world) => {
+    const row = activity(world, (candidate) => candidate.registrationId !== null);
+    row.occurredOn = '2026-01-01';
+  }],
+  ['Kynd activity confirmed before opportunity ended', (world) => {
+    const row = activity(world, (candidate) => candidate.registrationId !== null);
+    const registered = world.registrations.find((candidate) => candidate.id === row.registrationId);
+    const item = opportunity(world, (candidate) => candidate.id === registered.opportunityId);
+    row.createdAt = new Date(new Date(item.endsAt).getTime() - 60000).toISOString();
+  }],
+  ['manual activity contains registration', (world) => {
+    const row = activity(world, (candidate) => candidate.registrationId === null);
+    row.registrationId = world.activities.find((candidate) => candidate.registrationId).registrationId;
+  }],
+  ['manual activity missing title', (world) => {
+    activity(world, (candidate) => candidate.registrationId === null).manualTitle = null;
+  }],
+  ['manual activity missing cause', (world) => {
+    activity(world, (candidate) => candidate.registrationId === null).manualCauseId = null;
+  }],
+  ['manual activity references nonexistent cause', (world) => {
+    activity(world, (candidate) => candidate.registrationId === null).manualCauseId = UNKNOWN_UUID;
+  }],
+  ['manual activity missing organization name', (world) => {
+    activity(world, (candidate) => candidate.registrationId === null).manualOrgName = null;
+  }],
+  ['manual activity references nonexistent organization', (world) => {
+    activity(world, (candidate) => candidate.manualOrgId !== null).manualOrgId = UNKNOWN_UUID;
+  }],
+  ['manual activity organization snapshot mismatch', (world) => {
+    activity(world, (candidate) => candidate.manualOrgId !== null).manualOrgName = 'Changed Name';
+  }],
+  ['manual activity occurs before user creation', (world) => {
+    const row = activity(world, (candidate) => candidate.registrationId === null);
+    const user = world.users.find((candidate) => candidate.id === row.userId);
+    row.occurredOn = new Date(new Date(user.createdAt).getTime() - 86400000)
+      .toISOString().slice(0, 10);
+  }],
+  ['manual activity created before occurrence', (world) => {
+    const row = activity(world, (candidate) => candidate.registrationId === null);
+    row.createdAt = new Date(new Date(`${row.occurredOn}T00:00:00Z`).getTime() - 60000)
+      .toISOString();
+  }],
+  ['duplicate manual activity date for user', (world) => {
+    const first = activity(world, (candidate) => candidate.registrationId === null
+      && world.activities.filter((item) => item.userId === candidate.userId
+        && item.registrationId === null).length > 1);
+    const second = world.activities.find((candidate) => candidate !== first
+      && candidate.userId === first.userId && candidate.registrationId === null);
+    second.occurredOn = first.occurredOn;
+    resetManualActivityId(second);
+  }],
+  ['wrong Maya activity total', (world) => {
+    const maya = world.users.find((user) => user.displayName === 'Maya Ellis');
+    const row = activity(world, (candidate) => candidate.userId === maya.id
+      && candidate.registrationId === null);
+    row.userId = world.users.find((user) => user.tier === 'regular' && user.id !== maya.id).id;
+    resetManualActivityId(row);
+  }],
+  ['wrong Maya activity source split', (world) => {
+    const maya = world.users.find((user) => user.displayName === 'Maya Ellis');
+    const kyndRow = activity(world, (candidate) => candidate.userId === maya.id
+      && candidate.registrationId !== null);
+    const replacement = unconvertedRegistration(world, (candidate, item) => (
+      world.users.find((user) => user.id === candidate.userId).tier === 'regular'
+      && candidate.userId !== maya.id && candidate.status === 'joined'
+      && item.timeBucket === 'recent_past'
+    ));
+    useRegistration(world, kyndRow, replacement);
+    const manualRow = activity(world, (candidate) => candidate.userId !== maya.id
+      && candidate.registrationId === null
+      && world.users.find((user) => user.id === candidate.userId).tier === 'regular');
+    manualRow.userId = maya.id;
+    resetManualActivityId(manualRow);
+  }],
+  ['wrong David activity total', (world) => {
+    const david = world.users.find((user) => user.displayName === 'David Mercer');
+    const row = activity(world, (candidate) => candidate.userId === david.id
+      && candidate.registrationId === null);
+    row.userId = world.users.find((user) => user.tier === 'connector' && user.id !== david.id).id;
+    resetManualActivityId(row);
+  }],
+  ['wrong David activity source split', (world) => {
+    const david = world.users.find((user) => user.displayName === 'David Mercer');
+    const kyndRow = activity(world, (candidate) => candidate.userId === david.id
+      && candidate.registrationId !== null);
+    const replacement = unconvertedRegistration(world, (candidate, item) => (
+      world.users.find((user) => user.id === candidate.userId).tier === 'connector'
+      && candidate.userId !== david.id && candidate.status === 'joined'
+      && item.timeBucket === 'recent_past'
+    ));
+    useRegistration(world, kyndRow, replacement);
+    const manualRow = activity(world, (candidate) => candidate.userId !== david.id
+      && candidate.registrationId === null
+      && world.users.find((user) => user.id === candidate.userId).tier === 'connector');
+    manualRow.userId = david.id;
+    resetManualActivityId(manualRow);
+  }],
+];
+
+const INTEGRITY_CHECKS = [
+  ['manual linked activity excluded from public organization impact', (world) => {
+    const before = JSON.stringify([...buildOrganizationPublicImpact(world)]);
+    const row = activity(world, (candidate) => candidate.registrationId === null
+      && candidate.manualOrgId !== null);
+    row.hours += 0.5;
+    const after = JSON.stringify([...buildOrganizationPublicImpact(world)]);
+    return validateWorld(world) && before === after;
+  }],
 ];
 
 function runMutationValidation() {
   const baseline = generateWorld();
   const failures = [];
+  const integrityFailures = [];
 
   for (const [name, mutate] of MUTATIONS) {
     const world = structuredClone(baseline);
@@ -258,15 +463,30 @@ function runMutationValidation() {
     }
   }
 
+  for (const [name, check] of INTEGRITY_CHECKS) {
+    const world = structuredClone(baseline);
+    try {
+      if (!check(world)) integrityFailures.push(name);
+    } catch {
+      integrityFailures.push(name);
+    }
+  }
+
   const result = {
     baselineValid: validateWorld(baseline),
     invalidCasesRun: MUTATIONS.length,
     invalidCasesRejected: MUTATIONS.length - failures.length,
     failures,
+    integrityCasesRun: INTEGRITY_CHECKS.length,
+    integrityCasesPassed: INTEGRITY_CHECKS.length - integrityFailures.length,
+    integrityFailures,
   };
 
-  if (failures.length) {
-    throw new Error(`Mutation validation accepted invalid cases: ${failures.join(', ')}`);
+  if (failures.length || integrityFailures.length) {
+    throw new Error([
+      failures.length ? `accepted invalid cases: ${failures.join(', ')}` : null,
+      integrityFailures.length ? `failed integrity cases: ${integrityFailures.join(', ')}` : null,
+    ].filter(Boolean).join('; '));
   }
 
   return result;
@@ -276,4 +496,4 @@ if (require.main === module) {
   console.log(JSON.stringify(runMutationValidation(), null, 2));
 }
 
-module.exports = { MUTATIONS, runMutationValidation };
+module.exports = { MUTATIONS, INTEGRITY_CHECKS, runMutationValidation };

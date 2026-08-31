@@ -73,6 +73,40 @@ const CONFIG = Object.freeze({
     flagshipJoined: 5,
   },
 
+  // Milestone 5 product decisions. Activities are the authoritative
+  // contribution history, not an automatic mirror of registrations.
+  activityTargets: {
+    sources: {
+      kynd: 2100,
+      manual: 400,
+    },
+    kyndByUserTier: {
+      light: 580,
+      regular: 790,
+      highly_active: 500,
+      connector: 230,
+    },
+    manualByUserTier: {
+      light: 60,
+      regular: 140,
+      highly_active: 130,
+      connector: 70,
+    },
+    manualOrganizations: {
+      linkedKynd: 120,
+      external: 280,
+    },
+    manualRecency: {
+      previous90Days: 250,
+      days91To180: 110,
+      days181To365: 40,
+    },
+    anchors: {
+      maya: { kynd: 4, manual: 1 },
+      david: { kynd: 9, manual: 3 },
+    },
+  },
+
   userTiers: [
     { name: 'light', weight: 0.55 },
     { name: 'regular', weight: 0.30 },
