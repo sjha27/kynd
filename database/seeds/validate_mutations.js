@@ -1,3 +1,4 @@
+const CONFIG = require('./config');
 const { generateWorld } = require('./generate');
 const { validateWorld } = require('./lib/validate');
 const { deterministicUuid } = require('./lib/ids');
@@ -5,7 +6,10 @@ const { buildOrganizationPublicImpact, localCalendarDate } = require('./lib/acti
 const {
   deriveAmountRaisedByUser,
   deriveFundraiserProgress,
+  easternTimestamp,
 } = require('./lib/fundraisers');
+const { deriveProfileMetrics } = require('./lib/activities');
+const { ANCHOR_COMMENTS } = require('./data/social');
 
 const UNKNOWN_UUID = '00000000-0000-5000-8000-000000000000';
 
@@ -41,6 +45,41 @@ function fundraiserSupport(world, predicate = () => true) {
   return world.fundraiserSupports.find((row) => predicate(
     row, world.fundraisers.find((item) => item.id === row.fundraiserId)
   ));
+}
+
+function reaction(world, predicate = () => true) {
+  return world.reactions.find((row) => predicate(row));
+}
+
+function comment(world, predicate = () => true) {
+  return world.comments.find((row) => predicate(row));
+}
+
+function socialTargetId(row) {
+  return row.activityId || row.opportunityId || row.fundraiserId;
+}
+
+function socialTargetType(row) {
+  return row.activityId ? 'activity' : row.opportunityId ? 'opportunity' : 'fundraiser';
+}
+
+function resetReactionId(row) {
+  row.id = deterministicUuid(
+    'reaction', `${row.userId}|${socialTargetType(row)}|${socialTargetId(row)}`
+  );
+}
+
+function resetCommentId(row) {
+  row.id = deterministicUuid(
+    'comment', `${row.userId}|${socialTargetType(row)}|${socialTargetId(row)}`
+  );
+}
+
+function retargetSocialRow(row, key, id) {
+  row.activityId = null;
+  row.opportunityId = null;
+  row.fundraiserId = null;
+  row[key] = id;
 }
 
 function resetFundraiserId(row) {
@@ -710,6 +749,356 @@ const MUTATIONS = [
   ['Mosaic fundraiser no longer ended', (world) => {
     fundraiser(world, (item) => item.title === 'Summer Meal Box Fund').endDate = '2026-09-30';
   }],
+  ['wrong reaction count', (world) => { world.reactions.pop(); }],
+  ['wrong reaction target distribution', (world) => {
+    const row = reaction(world, (item) => item.activityId);
+    const target = opportunity(world, (item) => item.timeBucket === 'upcoming');
+    retargetSocialRow(row, 'opportunityId', target.id);
+    resetReactionId(row);
+  }],
+  ['wrong reaction type distribution', (world) => {
+    reaction(world, (item) => item.activityId && item.reactionType === 'like').reactionType = 'celebrate';
+  }],
+  ['duplicate reaction ID', (world) => { world.reactions[1].id = world.reactions[0].id; }],
+  ['invalid reaction UUID', (world) => { world.reactions[0].id = 'not-a-uuid'; }],
+  ['invalid reaction type', (world) => { world.reactions[0].reactionType = 'applaud'; }],
+  ['reaction missing user', (world) => {
+    world.reactions[0].userId = UNKNOWN_UUID;
+    resetReactionId(world.reactions[0]);
+  }],
+  ['reaction with zero targets', (world) => {
+    const row = world.reactions[0];
+    row.activityId = null;
+    row.opportunityId = null;
+    row.fundraiserId = null;
+  }],
+  ['reaction with multiple targets', (world) => {
+    const row = reaction(world, (item) => item.activityId);
+    row.opportunityId = world.opportunities[0].id;
+  }],
+  ['reaction references missing Activity', (world) => {
+    const row = reaction(world, (item) => item.activityId);
+    row.activityId = UNKNOWN_UUID;
+    resetReactionId(row);
+  }],
+  ['reaction references missing Opportunity', (world) => {
+    const row = reaction(world, (item) => item.opportunityId);
+    row.opportunityId = UNKNOWN_UUID;
+    resetReactionId(row);
+  }],
+  ['reaction references missing Fundraiser', (world) => {
+    const row = reaction(world, (item) => item.fundraiserId);
+    row.fundraiserId = UNKNOWN_UUID;
+    resetReactionId(row);
+  }],
+  ...['activityId', 'opportunityId', 'fundraiserId'].map((key) => [
+    `duplicate user/${key.replace('Id', '')} reaction`,
+    (world) => {
+      const rows = world.reactions.filter((item) => item[key]);
+      rows[1].userId = rows[0].userId;
+      rows[1][key] = rows[0][key];
+      resetReactionId(rows[1]);
+    },
+  ]),
+  ['support reaction on Fundraiser', (world) => {
+    reaction(world, (item) => item.fundraiserId && item.reactionType === 'like').reactionType = 'support';
+  }],
+  ['Activity owner reacts to own Activity', (world) => {
+    const row = reaction(world, (item) => item.activityId);
+    row.userId = activity(world, (item) => item.id === row.activityId).userId;
+    resetReactionId(row);
+  }],
+  ['user host reacts to own Opportunity', (world) => {
+    const target = opportunity(world, (item) => item.hostUserId && item.status === 'published');
+    const row = reaction(world, (item) => item.opportunityId);
+    retargetSocialRow(row, 'opportunityId', target.id);
+    row.userId = target.hostUserId;
+    resetReactionId(row);
+  }],
+  ['fundraiser creator reacts to own Fundraiser', (world) => {
+    const target = fundraiser(world, (item) => item.creatorUserId && item.status === 'active');
+    const row = reaction(world, (item) => item.fundraiserId);
+    retargetSocialRow(row, 'fundraiserId', target.id);
+    row.userId = target.creatorUserId;
+    resetReactionId(row);
+  }],
+  ['reaction on cancelled Opportunity', (world) => {
+    const row = reaction(world, (item) => item.opportunityId);
+    retargetSocialRow(row, 'opportunityId', opportunity(world, (item) => item.status === 'cancelled').id);
+    resetReactionId(row);
+  }],
+  ['reaction on cancelled Fundraiser', (world) => {
+    const row = reaction(world, (item) => item.fundraiserId);
+    retargetSocialRow(row, 'fundraiserId', fundraiser(world, (item) => item.status === 'cancelled').id);
+    resetReactionId(row);
+  }],
+  ['reaction before user existed', (world) => {
+    const row = world.reactions[0];
+    const user = world.users.find((item) => item.id === row.userId);
+    row.createdAt = new Date(new Date(user.createdAt).getTime() - 60000).toISOString();
+  }],
+  ['reaction before target existed', (world) => {
+    const row = reaction(world, (item) => item.activityId);
+    const target = activity(world, (item) => item.id === row.activityId);
+    row.createdAt = new Date(new Date(target.createdAt).getTime() - 60000).toISOString();
+  }],
+  ['reaction after anchor', (world) => { world.reactions[0].createdAt = '2026-08-31T00:00:00.000Z'; }],
+  ['wrong comment count', (world) => { world.comments.pop(); }],
+  ['wrong comment target distribution', (world) => {
+    const row = comment(world, (item) => item.activityId);
+    retargetSocialRow(row, 'opportunityId', opportunity(world, (item) => item.timeBucket === 'upcoming').id);
+    resetCommentId(row);
+  }],
+  ['duplicate comment ID', (world) => { world.comments[1].id = world.comments[0].id; }],
+  ['invalid comment UUID', (world) => { world.comments[0].id = 'not-a-uuid'; }],
+  ['comment missing user', (world) => {
+    world.comments[0].userId = UNKNOWN_UUID;
+    resetCommentId(world.comments[0]);
+  }],
+  ['comment with zero targets', (world) => {
+    const row = world.comments[0];
+    row.activityId = null;
+    row.opportunityId = null;
+    row.fundraiserId = null;
+  }],
+  ['comment with multiple targets', (world) => {
+    comment(world, (item) => item.activityId).opportunityId = world.opportunities[0].id;
+  }],
+  ['comment references missing target', (world) => {
+    const row = comment(world, (item) => item.fundraiserId);
+    row.fundraiserId = UNKNOWN_UUID;
+    resetCommentId(row);
+  }],
+  ['blank comment body', (world) => { world.comments[0].body = ''; }],
+  ['whitespace-only comment body', (world) => { world.comments[0].body = '   '; }],
+  ['comment body over 1000 characters', (world) => { world.comments[0].body = 'x'.repeat(1001); }],
+  ['duplicate seeded user-target comment', (world) => {
+    world.comments[1].userId = world.comments[0].userId;
+    retargetSocialRow(world.comments[1], `${socialTargetType(world.comments[0])}Id`, socialTargetId(world.comments[0]));
+    resetCommentId(world.comments[1]);
+  }],
+  ['Activity owner comments on own Activity', (world) => {
+    const row = comment(world, (item) => item.activityId);
+    row.userId = activity(world, (item) => item.id === row.activityId).userId;
+    resetCommentId(row);
+  }],
+  ['user host comments on own Opportunity', (world) => {
+    const target = opportunity(world, (item) => item.hostUserId && item.status === 'published');
+    const row = comment(world, (item) => item.opportunityId);
+    retargetSocialRow(row, 'opportunityId', target.id);
+    row.userId = target.hostUserId;
+    resetCommentId(row);
+  }],
+  ['fundraiser creator comments on own Fundraiser', (world) => {
+    const target = fundraiser(world, (item) => item.creatorUserId && item.status === 'active');
+    const row = comment(world, (item) => item.fundraiserId);
+    retargetSocialRow(row, 'fundraiserId', target.id);
+    row.userId = target.creatorUserId;
+    resetCommentId(row);
+  }],
+  ['comment on cancelled Opportunity', (world) => {
+    const row = comment(world, (item) => item.opportunityId);
+    retargetSocialRow(row, 'opportunityId', opportunity(world, (item) => item.status === 'cancelled').id);
+    resetCommentId(row);
+  }],
+  ['comment on cancelled Fundraiser', (world) => {
+    const row = comment(world, (item) => item.fundraiserId);
+    retargetSocialRow(row, 'fundraiserId', fundraiser(world, (item) => item.status === 'cancelled').id);
+    resetCommentId(row);
+  }],
+  ['comment before user existed', (world) => {
+    const row = world.comments[0];
+    const user = world.users.find((item) => item.id === row.userId);
+    row.createdAt = new Date(new Date(user.createdAt).getTime() - 60000).toISOString();
+  }],
+  ['comment before target existed', (world) => {
+    const row = comment(world, (item) => item.activityId);
+    const target = activity(world, (item) => item.id === row.activityId);
+    row.createdAt = new Date(new Date(target.createdAt).getTime() - 60000).toISOString();
+  }],
+  ['comment after anchor', (world) => { world.comments[0].createdAt = '2026-08-31T00:00:00.000Z'; }],
+  ['joined-style Opportunity comment without registration', (world) => {
+    const row = comment(world, (item) => item.opportunityId && !world.registrations.some(
+      (registrationRow) => registrationRow.userId === item.userId
+        && registrationRow.opportunityId === item.opportunityId
+        && registrationRow.status === 'joined'
+    ));
+    row.body = ANCHOR_COMMENTS.flagshipByMaya;
+  }],
+  ['joined-style comment before joinedAt', (world) => {
+    const row = comment(world, (item) => item.opportunityId
+      && item.body === ANCHOR_COMMENTS.flagshipByMaya);
+    const registrationRow = registration(world, (item) => (
+      item.userId === row.userId && item.opportunityId === row.opportunityId
+    ));
+    row.createdAt = new Date(new Date(registrationRow.joinedAt).getTime() - 60000).toISOString();
+  }],
+  ['joined-style comment on recent-past Opportunity', (world) => {
+    let selected;
+    for (const target of world.opportunities.filter((item) => item.timeBucket === 'recent_past')) {
+      const row = world.comments.find((item) => item.opportunityId === target.id);
+      const registrationRow = world.registrations.find((item) => (
+        item.opportunityId === target.id && item.status === 'joined'
+        && item.userId !== target.hostUserId
+        && !world.comments.some((candidate) => (
+          candidate.userId === item.userId && candidate.opportunityId === target.id
+        ))
+      ));
+      if (row && registrationRow) {
+        selected = { row, registrationRow };
+        break;
+      }
+    }
+    selected.row.userId = selected.registrationRow.userId;
+    selected.row.body = ANCHOR_COMMENTS.flagshipByMaya;
+    selected.row.createdAt = CONFIG.anchorDate;
+    resetCommentId(selected.row);
+  }],
+  ['supporter-style Fundraiser comment without financial support', (world) => {
+    const row = comment(world, (item) => item.fundraiserId && !world.fundraiserSupports.some(
+      (support) => support.userId === item.userId && support.fundraiserId === item.fundraiserId
+    ));
+    row.body = ANCHOR_COMMENTS.mayaFundraiserByDavid;
+  }],
+  ['supporter-style comment before supportedAt', (world) => {
+    const row = comment(world, (item) => item.fundraiserId
+      && item.body === ANCHOR_COMMENTS.mayaFundraiserByDavid);
+    const support = fundraiserSupport(world, (item) => (
+      item.userId === row.userId && item.fundraiserId === row.fundraiserId
+    ));
+    row.createdAt = new Date(new Date(support.supportedAt).getTime() - 60000).toISOString();
+  }],
+  ['ended-success comment before campaign end', (world) => {
+    const target = fundraiser(world, (item) => item.title === 'Summer Meal Box Fund');
+    const row = comment(world, (item) => item.fundraiserId === target.id
+      && item.body === 'Amazing to see this campaign reach its goal — worth celebrating.');
+    row.createdAt = new Date(
+      new Date(easternTimestamp(target.endDate, '23:59:59')).getTime() - 60000
+    ).toISOString();
+  }],
+  ['co-participant Activity comment backed only by joined registration', (world) => {
+    let selected;
+    for (const target of world.activities.filter((item) => item.registrationId)) {
+      const source = world.registrations.find((item) => item.id === target.registrationId);
+      const opportunityRow = world.opportunities.find((item) => item.id === source.opportunityId);
+      const row = world.comments.find((item) => item.activityId === target.id);
+      const joined = world.registrations.find((item) => (
+        item.opportunityId === source.opportunityId && item.status === 'joined'
+        && item.userId !== target.userId && item.userId !== opportunityRow.hostUserId
+        && !world.comments.some((candidate) => (
+          candidate.userId === item.userId && candidate.activityId === target.id
+        ))
+        && !world.activities.some((candidate) => {
+          if (candidate.userId !== item.userId || !candidate.registrationId) return false;
+          const registrationRow = world.registrations.find(
+            (registrationItem) => registrationItem.id === candidate.registrationId
+          );
+          return registrationRow.opportunityId === source.opportunityId;
+        })
+      ));
+      if (row && joined) {
+        selected = { row, joined };
+        break;
+      }
+    }
+    selected.row.userId = selected.joined.userId;
+    selected.row.body = 'Really enjoyed working together on this community project.';
+    selected.row.createdAt = CONFIG.anchorDate;
+    resetCommentId(selected.row);
+  }],
+  ['wrong Maya Activity reaction count', (world) => {
+    const maya = world.users.find((item) => item.displayName === 'Maya Ellis');
+    const target = activity(world, (item) => item.userId === maya.id
+      && item.manualTitle === 'Westside Community Garden Morning');
+    const row = reaction(world, (item) => item.activityId === target.id);
+    const destination = world.activities.find((item) => item.registrationId === null
+      && item.id !== target.id && !world.reactions.some((existing) => (
+        existing.userId === row.userId && existing.activityId === item.id
+      )));
+    retargetSocialRow(row, 'activityId', destination.id);
+    resetReactionId(row);
+  }],
+  ['wrong Maya Activity comment count', (world) => {
+    const maya = world.users.find((item) => item.displayName === 'Maya Ellis');
+    const target = activity(world, (item) => item.userId === maya.id
+      && item.manualTitle === 'Westside Community Garden Morning');
+    world.comments = world.comments.filter((item, index) => item.activityId !== target.id || index !== world.comments.findIndex((candidate) => candidate.activityId === target.id));
+  }],
+  ['missing David Celebrate on Maya Activity', (world) => {
+    const david = world.users.find((item) => item.displayName === 'David Mercer');
+    reaction(world, (item) => item.userId === david.id && item.activityId
+      && activity(world, (target) => target.id === item.activityId)?.manualTitle
+        === 'Westside Community Garden Morning').reactionType = 'like';
+  }],
+  ['missing David comment on Maya Activity', (world) => {
+    const david = world.users.find((item) => item.displayName === 'David Mercer');
+    comment(world, (item) => item.userId === david.id
+      && item.body === ANCHOR_COMMENTS.mayaActivityByDavid).body = 'Community effort at its best.';
+  }],
+  ['wrong David Activity engagement', (world) => {
+    const david = world.users.find((item) => item.displayName === 'David Mercer');
+    const row = world.reactions.find((item) => item.activityId
+      && activity(world, (target) => target.id === item.activityId)?.userId === david.id
+      && activity(world, (target) => target.id === item.activityId)?.registrationId);
+    world.reactions.splice(world.reactions.indexOf(row), 1);
+  }],
+  ['missing Maya Celebrate on David Activity', (world) => {
+    const maya = world.users.find((item) => item.displayName === 'Maya Ellis');
+    reaction(world, (item) => item.userId === maya.id && item.activityId
+      && activity(world, (target) => target.id === item.activityId)?.userId
+        === world.users.find((user) => user.displayName === 'David Mercer').id).reactionType = 'like';
+  }],
+  ['wrong flagship social counts', (world) => {
+    const flagship = opportunity(world, (item) => item.flagship);
+    const row = reaction(world, (item) => item.opportunityId === flagship.id);
+    world.reactions.splice(world.reactions.indexOf(row), 1);
+  }],
+  ['missing Maya Support reaction on flagship', (world) => {
+    const maya = world.users.find((item) => item.displayName === 'Maya Ellis');
+    const flagship = opportunity(world, (item) => item.flagship);
+    reaction(world, (item) => item.userId === maya.id
+      && item.opportunityId === flagship.id).reactionType = 'like';
+  }],
+  ['missing Maya joined-backed flagship comment', (world) => {
+    comment(world, (item) => item.body === ANCHOR_COMMENTS.flagshipByMaya).body
+      = 'A clear, practical way to support Environment.';
+  }],
+  ['Fundraiser support reaction added to Maya anchor campaign', (world) => {
+    const target = fundraiser(world, (item) => item.title === '100 Meal Boxes for Atlanta Families');
+    reaction(world, (item) => item.fundraiserId === target.id).reactionType = 'support';
+  }],
+  ['wrong Maya fundraiser social counts', (world) => {
+    const target = fundraiser(world, (item) => item.title === '100 Meal Boxes for Atlanta Families');
+    const row = comment(world, (item) => item.fundraiserId === target.id);
+    world.comments.splice(world.comments.indexOf(row), 1);
+  }],
+  ['missing David social engagement on Maya fundraiser', (world) => {
+    const david = world.users.find((item) => item.displayName === 'David Mercer');
+    comment(world, (item) => item.userId === david.id
+      && item.body === ANCHOR_COMMENTS.mayaFundraiserByDavid).body
+        = 'Cheering this campaign on as it builds momentum.';
+  }],
+  ['wrong David fundraiser social counts', (world) => {
+    const target = fundraiser(world, (item) => item.title === 'Roswell Veterans Resource Day Fund');
+    const row = reaction(world, (item) => item.fundraiserId === target.id);
+    world.reactions.splice(world.reactions.indexOf(row), 1);
+  }],
+  ['missing Maya social engagement on David fundraiser', (world) => {
+    const maya = world.users.find((item) => item.displayName === 'Maya Ellis');
+    comment(world, (item) => item.userId === maya.id
+      && item.body === ANCHOR_COMMENTS.davidFundraiserByMaya).body
+        = 'Cheering this campaign on as it builds momentum.';
+  }],
+  ['wrong Riverlight social engagement', (world) => {
+    const target = fundraiser(world, (item) => item.title === "Keep Atlanta's Waterways Clean This Fall");
+    const row = comment(world, (item) => item.fundraiserId === target.id);
+    world.comments.splice(world.comments.indexOf(row), 1);
+  }],
+  ['wrong Mosaic social engagement', (world) => {
+    const target = fundraiser(world, (item) => item.title === 'Summer Meal Box Fund');
+    const row = reaction(world, (item) => item.fundraiserId === target.id);
+    world.reactions.splice(world.reactions.indexOf(row), 1);
+  }],
 ];
 
 const INTEGRITY_CHECKS = [
@@ -735,6 +1124,30 @@ const INTEGRITY_CHECKS = [
     const after = deriveAmountRaisedByUser(world).get(maya.id);
     const nextProgress = deriveFundraiserProgress(world).get(row.fundraiserId).amountRaisedCents;
     return validateWorld(world) && before === after && nextProgress === priorProgress + 2500;
+  }],
+  ['fundraiser social reaction cannot change financial truth', (world) => {
+    const beforeProgress = JSON.stringify([...deriveFundraiserProgress(world)]);
+    const beforeRaised = JSON.stringify([...deriveAmountRaisedByUser(world)]);
+    const row = reaction(world, (item) => item.fundraiserId && item.reactionType === 'like');
+    row.reactionType = 'celebrate';
+    const afterProgress = JSON.stringify([...deriveFundraiserProgress(world)]);
+    const afterRaised = JSON.stringify([...deriveAmountRaisedByUser(world)]);
+    return beforeProgress === afterProgress && beforeRaised === afterRaised;
+  }],
+  ['Activity social engagement cannot change contribution truth', (world) => {
+    const beforeProfiles = JSON.stringify([...deriveProfileMetrics(world)]);
+    const beforeImpact = JSON.stringify([...buildOrganizationPublicImpact(world)]);
+    const beforeProgress = JSON.stringify([...deriveFundraiserProgress(world)]);
+    const activityReaction = reaction(world, (item) => item.activityId);
+    const activityComment = comment(world, (item) => item.activityId);
+    world.reactions.splice(world.reactions.indexOf(activityReaction), 1);
+    activityComment.body = 'A morning well spent — thanks for sharing this.';
+    const afterProfiles = JSON.stringify([...deriveProfileMetrics(world)]);
+    const afterImpact = JSON.stringify([...buildOrganizationPublicImpact(world)]);
+    const afterProgress = JSON.stringify([...deriveFundraiserProgress(world)]);
+    return beforeProfiles === afterProfiles
+      && beforeImpact === afterImpact
+      && beforeProgress === afterProgress;
   }],
 ];
 

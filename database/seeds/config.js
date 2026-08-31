@@ -138,6 +138,57 @@ const CONFIG = Object.freeze({
     },
   },
 
+  // Milestone 7 product decisions. Social engagement amplifies existing
+  // contribution and fundraising truth; it never creates either kind of truth.
+  socialTargets: {
+    reactions: {
+      total: 7000,
+      byTarget: { activity: 4200, opportunity: 1800, fundraiser: 1000 },
+      byTargetAndType: {
+        activity: { like: 1400, celebrate: 2200, support: 600 },
+        opportunity: { like: 1000, celebrate: 100, support: 700 },
+        fundraiser: { like: 700, celebrate: 300, support: 0 },
+      },
+      activitySource: { kynd: 3500, manual: 700 },
+      opportunityLifecycle: {
+        upcoming: 1350, recent_past: 300, farther_future: 150, cancelled: 0,
+      },
+      fundraiserLifecycle: { open: 750, ended: 250, cancelled: 0 },
+      activeTargets: {
+        activityKynd: 1025, activityManual: 225,
+        opportunityUpcoming: 500, opportunityRecentPast: 120,
+        opportunityFartherFuture: 55, fundraiserOpen: 145, fundraiserEnded: 50,
+      },
+      inactiveUsers: 36,
+      inactiveUsersByTier: { light: 24, regular: 10, highly_active: 2, connector: 0 },
+    },
+    comments: {
+      total: 2000,
+      byTarget: { activity: 1100, opportunity: 550, fundraiser: 350 },
+      activitySource: { kynd: 900, manual: 200 },
+      opportunityLifecycle: {
+        upcoming: 420, recent_past: 90, farther_future: 40, cancelled: 0,
+      },
+      fundraiserLifecycle: { open: 270, ended: 80, cancelled: 0 },
+      activeTargets: {
+        activityKynd: 550, activityManual: 130,
+        opportunityUpcoming: 210, opportunityRecentPast: 60,
+        opportunityFartherFuture: 30, fundraiserOpen: 110, fundraiserEnded: 40,
+      },
+      inactiveUsers: 150,
+      inactiveUsersByTier: { light: 100, regular: 42, highly_active: 8, connector: 0 },
+    },
+    anchors: {
+      mayaActivity: { reactions: 8, comments: 3 },
+      davidActivity: { reactions: 10, comments: 4 },
+      flagshipOpportunity: { reactions: 12, comments: 4 },
+      mayaFundraiser: { reactions: 14, comments: 5 },
+      davidFundraiser: { reactions: 16, comments: 5 },
+      riverlightFundraiser: { reactions: 20, comments: 6 },
+      mosaicFundraiser: { reactions: 15, comments: 4 },
+    },
+  },
+
   userTiers: [
     { name: 'light', weight: 0.55 },
     { name: 'regular', weight: 0.30 },

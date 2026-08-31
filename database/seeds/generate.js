@@ -12,6 +12,8 @@ const { generateActivities } = require('./lib/activities');
 const { buildActivityDiagnostics } = require('./lib/activity_diagnostics');
 const { generateFundraising } = require('./lib/fundraisers');
 const { buildFundraiserDiagnostics } = require('./lib/fundraiser_diagnostics');
+const { generateSocial } = require('./lib/social');
+const { buildSocialDiagnostics } = require('./lib/social_diagnostics');
 const {
   CAUSES, FIRST_NAMES, LAST_NAMES, ATLANTA_METRO_LOCATIONS,
   GEORGIA_LOCATIONS, ORGANIZATION_PREFIXES, ORGANIZATION_NOUNS, USER_BIOS,
@@ -415,6 +417,8 @@ function buildDiagnostics(world) {
       activities: world.activities.length,
       fundraisers: world.fundraisers.length,
       fundraiserSupports: world.fundraiserSupports.length,
+      reactions: world.reactions.length,
+      comments: world.comments.length,
     },
     userPopulation: {
       byActivityTier: Object.fromEntries(CONFIG.userTiers.map(({ name }) => [
@@ -453,6 +457,7 @@ function buildDiagnostics(world) {
     participation: buildParticipationDiagnostics(world),
     activities: buildActivityDiagnostics(world),
     fundraising: buildFundraiserDiagnostics(world),
+    social: buildSocialDiagnostics(world),
   };
 }
 
@@ -476,7 +481,9 @@ function generateWorld() {
   const activities = generateActivities(rng, participationWorld);
   const activityWorld = { ...participationWorld, activities };
   const { fundraisers, fundraiserSupports } = generateFundraising(rng, activityWorld);
-  const world = { ...activityWorld, fundraisers, fundraiserSupports };
+  const fundraisingWorld = { ...activityWorld, fundraisers, fundraiserSupports };
+  const { reactions, comments } = generateSocial(rng, fundraisingWorld);
+  const world = { ...fundraisingWorld, reactions, comments };
   validateWorld(world);
   return world;
 }
