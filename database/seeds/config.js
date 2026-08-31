@@ -60,6 +60,19 @@ const CONFIG = Object.freeze({
     },
   },
 
+  // Milestone 4 product decisions. These exact totals preserve the
+  // difference between active commitment and historical cancellation.
+  participationTargets: {
+    registrations: {
+      recentPast: { joined: 3200, cancelled: 300 },
+      upcoming: { joined: 2600, cancelled: 200 },
+      fartherFuture: { joined: 450, cancelled: 50 },
+      cancelled: { joined: 0, cancelled: 200 },
+    },
+    savedOpportunities: 2000,
+    flagshipJoined: 5,
+  },
+
   userTiers: [
     { name: 'light', weight: 0.55 },
     { name: 'regular', weight: 0.30 },

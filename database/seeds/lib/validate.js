@@ -1,6 +1,7 @@
 const CONFIG = require('../config');
 const { CAUSES } = require('../data/content');
 const { validateOpportunities } = require('./validate_opportunities');
+const { validateParticipation } = require('./validate_participation');
 
 const UUID_V5_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -119,6 +120,7 @@ function validateWorld(world) {
   for (const collection of [
     'causes', 'users', 'organizations', 'userCauses',
     'organizationCauses', 'userFollows', 'organizationFollows', 'opportunities',
+    'registrations', 'savedOpportunities',
   ]) {
     assert(Array.isArray(world[collection]), `${collection} must be an array`);
   }
@@ -254,6 +256,7 @@ function validateWorld(world) {
   ]);
 
   validateOpportunities(world);
+  validateParticipation(world);
 
   return true;
 }
