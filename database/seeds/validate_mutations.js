@@ -2,6 +2,10 @@ const { generateWorld } = require('./generate');
 const { validateWorld } = require('./lib/validate');
 const { deterministicUuid } = require('./lib/ids');
 const { buildOrganizationPublicImpact, localCalendarDate } = require('./lib/activities');
+const {
+  deriveAmountRaisedByUser,
+  deriveFundraiserProgress,
+} = require('./lib/fundraisers');
 
 const UNKNOWN_UUID = '00000000-0000-5000-8000-000000000000';
 
@@ -27,6 +31,27 @@ function resetRegistrationId(row) {
 
 function activity(world, predicate = () => true) {
   return world.activities.find((row) => predicate(row));
+}
+
+function fundraiser(world, predicate = () => true) {
+  return world.fundraisers.find((row) => predicate(row));
+}
+
+function fundraiserSupport(world, predicate = () => true) {
+  return world.fundraiserSupports.find((row) => predicate(
+    row, world.fundraisers.find((item) => item.id === row.fundraiserId)
+  ));
+}
+
+function resetFundraiserId(row) {
+  row.id = deterministicUuid('fundraiser', [
+    row.creatorUserId || row.creatorOrganizationId,
+    row.beneficiaryName, row.title, row.createdAt,
+  ].join('|'));
+}
+
+function resetFundraiserSupportId(row) {
+  row.id = deterministicUuid('fundraiser-support', `${row.userId}|${row.fundraiserId}`);
 }
 
 function resetManualActivityId(row) {
@@ -434,16 +459,282 @@ const MUTATIONS = [
     manualRow.userId = david.id;
     resetManualActivityId(manualRow);
   }],
+  ['wrong fundraiser count', (world) => { world.fundraisers.pop(); }],
+  ['wrong fundraiser creator split', (world) => {
+    const row = fundraiser(world, (item) => item.creatorUserId && !item.title.startsWith('100 Meal'));
+    const creator = world.organizations.find((item) => item.causes.some(
+      (name) => world.causes.find((cause) => cause.id === row.causeId).name === name
+    ));
+    row.creatorUserId = null;
+    row.creatorOrganizationId = creator.id;
+    resetFundraiserId(row);
+  }],
+  ['wrong fundraiser lifecycle totals', (world) => {
+    const row = fundraiser(world, (item) => item.status === 'active'
+      && item.endDate >= '2026-08-30' && !item.title.includes('Waterways'));
+    row.endDate = '2026-08-29';
+  }],
+  ['wrong fundraiser beneficiary split', (world) => {
+    const row = fundraiser(world, (item) => item.beneficiaryOrganizationId
+      && item.creatorUserId && !item.title.startsWith('100 Meal'));
+    const cause = world.causes.find((item) => item.id === row.causeId).name;
+    const external = require('./data/fundraisers').EXTERNAL_FUNDRAISER_BENEFICIARIES
+      .find((item) => item.cause === cause);
+    row.beneficiaryOrganizationId = null;
+    row.beneficiaryName = external.name;
+    resetFundraiserId(row);
+  }],
+  ['duplicate fundraiser ID', (world) => { world.fundraisers[5].id = world.fundraisers[4].id; }],
+  ['invalid fundraiser UUID', (world) => { world.fundraisers[4].id = 'not-a-uuid'; }],
+  ['both fundraiser creators', (world) => {
+    fundraiser(world, (item) => item.creatorUserId).creatorOrganizationId = world.organizations[0].id;
+  }],
+  ['neither fundraiser creator', (world) => {
+    const row = world.fundraisers[4];
+    row.creatorUserId = null;
+    row.creatorOrganizationId = null;
+  }],
+  ['fundraiser missing user creator', (world) => {
+    const row = fundraiser(world, (item) => item.creatorUserId && !item.title.startsWith('100 Meal'));
+    row.creatorUserId = UNKNOWN_UUID;
+    resetFundraiserId(row);
+  }],
+  ['fundraiser missing organization creator', (world) => {
+    const row = fundraiser(world, (item) => item.creatorOrganizationId && !item.title.includes('Waterways'));
+    row.creatorOrganizationId = UNKNOWN_UUID;
+    resetFundraiserId(row);
+  }],
+  ['fundraiser created before creator existed', (world) => {
+    const row = fundraiser(world, (item) => !['100 Meal Boxes for Atlanta Families', 'Roswell Veterans Resource Day Fund', "Keep Atlanta's Waterways Clean This Fall", 'Summer Meal Box Fund'].includes(item.title));
+    const creator = row.creatorUserId
+      ? world.users.find((item) => item.id === row.creatorUserId)
+      : world.organizations.find((item) => item.id === row.creatorOrganizationId);
+    row.createdAt = new Date(new Date(creator.createdAt).getTime() - 60000).toISOString();
+    resetFundraiserId(row);
+  }],
+  ['fundraiser invalid cause', (world) => { world.fundraisers[4].causeId = UNKNOWN_UUID; }],
+  ['fundraiser creator-cause mismatch', (world) => {
+    const row = fundraiser(world, (item) => item.creatorUserId && !item.title.startsWith('100 Meal'));
+    const creator = world.users.find((item) => item.id === row.creatorUserId);
+    row.causeId = world.causes.find((item) => !creator.causes.includes(item.name)).id;
+  }],
+  ['fundraiser invalid status', (world) => { world.fundraisers[4].status = 'ended'; }],
+  ['fundraiser blank title', (world) => { world.fundraisers[4].title = ' '; }],
+  ['fundraiser blank story', (world) => { world.fundraisers[4].story = ''; }],
+  ['fundraiser zero goal', (world) => { world.fundraisers[4].goalAmountCents = 0; }],
+  ['fundraiser negative goal', (world) => { world.fundraisers[4].goalAmountCents = -500; }],
+  ['fundraiser implausible goal', (world) => { world.fundraisers[4].goalAmountCents = 100000000; }],
+  ['fundraiser created after anchor', (world) => {
+    const row = world.fundraisers[4];
+    row.createdAt = '2026-08-31T00:00:00.000Z';
+    resetFundraiserId(row);
+  }],
+  ['fundraiser end before creation date', (world) => {
+    const row = fundraiser(world, (item) => !item.title.startsWith('100 Meal'));
+    row.endDate = new Date(new Date(row.createdAt).getTime() - 86400000).toISOString().slice(0, 10);
+  }],
+  ['fundraiser blank beneficiary name', (world) => { world.fundraisers[4].beneficiaryName = ' '; }],
+  ['fundraiser linked beneficiary missing', (world) => {
+    fundraiser(world, (item) => item.beneficiaryOrganizationId).beneficiaryOrganizationId = UNKNOWN_UUID;
+  }],
+  ['fundraiser beneficiary snapshot mismatch', (world) => {
+    fundraiser(world, (item) => item.beneficiaryOrganizationId).beneficiaryName = 'Changed Beneficiary';
+  }],
+  ['fundraiser beneficiary-cause mismatch', (world) => {
+    const row = fundraiser(world, (item) => item.beneficiaryOrganizationId
+      && !item.title.startsWith('100 Meal'));
+    const beneficiary = world.organizations.find((item) => item.id === row.beneficiaryOrganizationId);
+    row.causeId = world.causes.find((item) => !beneficiary.causes.includes(item.name)).id;
+  }],
+  ['fundraiser unknown external beneficiary', (world) => {
+    const row = fundraiser(world, (item) => !item.beneficiaryOrganizationId);
+    row.beneficiaryName = 'Unknown External Charity';
+    resetFundraiserId(row);
+  }],
+  ['fundraiser created before linked beneficiary existed', (world) => {
+    const row = fundraiser(world, (item) => item.beneficiaryOrganizationId
+      && !['100 Meal Boxes for Atlanta Families', 'Roswell Veterans Resource Day Fund', "Keep Atlanta's Waterways Clean This Fall", 'Summer Meal Box Fund'].includes(item.title));
+    const beneficiary = world.organizations.find((item) => item.id === row.beneficiaryOrganizationId);
+    row.createdAt = new Date(new Date(beneficiary.createdAt).getTime() - 60000).toISOString();
+    resetFundraiserId(row);
+  }],
+  ['fundraiser fabricated amount raised', (world) => { world.fundraisers[4].amountRaised = 100; }],
+  ['fundraiser fabricated supporter count', (world) => { world.fundraisers[4].supporterCount = 3; }],
+  ['fundraiser fabricated progress', (world) => { world.fundraisers[4].progress = 0.5; }],
+  ['wrong fundraiser support count', (world) => { world.fundraiserSupports.pop(); }],
+  ['duplicate fundraiser support ID', (world) => {
+    world.fundraiserSupports[1].id = world.fundraiserSupports[0].id;
+  }],
+  ['duplicate user-fundraiser support', (world) => {
+    world.fundraiserSupports[1] = { ...world.fundraiserSupports[0] };
+  }],
+  ['fundraiser support missing user', (world) => {
+    world.fundraiserSupports[0].userId = UNKNOWN_UUID;
+    resetFundraiserSupportId(world.fundraiserSupports[0]);
+  }],
+  ['fundraiser support missing fundraiser', (world) => {
+    world.fundraiserSupports[0].fundraiserId = UNKNOWN_UUID;
+    resetFundraiserSupportId(world.fundraiserSupports[0]);
+  }],
+  ['fundraiser support zero amount', (world) => { world.fundraiserSupports[0].amountCents = 0; }],
+  ['fundraiser support negative amount', (world) => { world.fundraiserSupports[0].amountCents = -500; }],
+  ['fundraiser support amount outside allowed range', (world) => {
+    world.fundraiserSupports[0].amountCents = 999999;
+  }],
+  ['fundraiser support exceeds goal', (world) => {
+    const row = fundraiserSupport(world, (item, campaign) => campaign.goalAmountCents === 25000);
+    row.amountCents = 50000;
+  }],
+  ['fundraiser creator self-support', (world) => {
+    const row = fundraiserSupport(world, (item, campaign) => campaign.creatorUserId);
+    const campaign = fundraiser(world, (item) => item.id === row.fundraiserId);
+    row.userId = campaign.creatorUserId;
+    resetFundraiserSupportId(row);
+  }],
+  ['fundraiser support before user existed', (world) => {
+    const row = world.fundraiserSupports[0];
+    const user = world.users.find((item) => item.id === row.userId);
+    row.supportedAt = new Date(new Date(user.createdAt).getTime() - 60000).toISOString();
+  }],
+  ['fundraiser support before fundraiser existed', (world) => {
+    const row = world.fundraiserSupports[0];
+    const campaign = fundraiser(world, (item) => item.id === row.fundraiserId);
+    row.supportedAt = new Date(new Date(campaign.createdAt).getTime() - 60000).toISOString();
+  }],
+  ['fundraiser support after anchor', (world) => {
+    world.fundraiserSupports[0].supportedAt = '2026-08-31T00:00:00.000Z';
+  }],
+  ['fundraiser support after campaign end', (world) => {
+    const row = fundraiserSupport(world, (item, campaign) => campaign.endDate < '2026-08-30');
+    const campaign = fundraiser(world, (item) => item.id === row.fundraiserId);
+    row.supportedAt = new Date(`${campaign.endDate}T23:59:59-04:00`).toISOString();
+    row.supportedAt = new Date(new Date(row.supportedAt).getTime() + 60000).toISOString();
+  }],
+  ['fundraiser support on cancelled campaign', (world) => {
+    const row = world.fundraiserSupports[0];
+    const cancelled = fundraiser(world, (item) => item.status === 'cancelled');
+    row.fundraiserId = cancelled.id;
+    resetFundraiserSupportId(row);
+  }],
+  ['wrong Maya fundraiser goal', (world) => {
+    fundraiser(world, (item) => item.title === '100 Meal Boxes for Atlanta Families').goalAmountCents = 150000;
+  }],
+  ['wrong Maya fundraiser support total', (world) => {
+    const campaign = fundraiser(world, (item) => item.title === '100 Meal Boxes for Atlanta Families');
+    fundraiserSupport(world, (item) => item.fundraiserId === campaign.id && item.amountCents === 5000).amountCents = 10000;
+  }],
+  ['wrong Maya fundraiser supporter count', (world) => {
+    const campaign = fundraiser(world, (item) => item.title === '100 Meal Boxes for Atlanta Families');
+    const row = fundraiserSupport(world, (item) => item.fundraiserId === campaign.id);
+    const destination = fundraiser(world, (item) => item.id !== campaign.id
+      && item.status === 'active' && item.endDate >= '2026-08-30'
+      && item.goalAmountCents >= row.amountCents
+      && !world.fundraiserSupports.some((support) => support.userId === row.userId
+        && support.fundraiserId === item.id));
+    row.fundraiserId = destination.id;
+    resetFundraiserSupportId(row);
+  }],
+  ['missing David support on Maya fundraiser', (world) => {
+    const david = world.users.find((item) => item.displayName === 'David Mercer');
+    const campaign = fundraiser(world, (item) => item.title === '100 Meal Boxes for Atlanta Families');
+    const row = fundraiserSupport(world, (item) => item.fundraiserId === campaign.id
+      && item.userId === david.id);
+    const existing = new Set(world.fundraiserSupports.filter((item) => item.fundraiserId === campaign.id).map((item) => item.userId));
+    row.userId = world.users.find((item) => !existing.has(item.id) && item.id !== campaign.creatorUserId).id;
+    resetFundraiserSupportId(row);
+  }],
+  ['Maya fundraiser self-support', (world) => {
+    const maya = world.users.find((item) => item.displayName === 'Maya Ellis');
+    const campaign = fundraiser(world, (item) => item.title === '100 Meal Boxes for Atlanta Families');
+    const row = fundraiserSupport(world, (item) => item.fundraiserId === campaign.id);
+    row.userId = maya.id;
+    resetFundraiserSupportId(row);
+  }],
+  ['second Maya-created fundraiser', (world) => {
+    const maya = world.users.find((item) => item.displayName === 'Maya Ellis');
+    const row = fundraiser(world, (item) => item.creatorUserId && item.creatorUserId !== maya.id
+      && maya.causes.includes(world.causes.find((cause) => cause.id === item.causeId).name));
+    row.creatorUserId = maya.id;
+    resetFundraiserId(row);
+  }],
+  ['wrong David fundraiser support total', (world) => {
+    const campaign = fundraiser(world, (item) => item.title === 'Roswell Veterans Resource Day Fund');
+    fundraiserSupport(world, (item) => item.fundraiserId === campaign.id && item.amountCents === 5000).amountCents = 10000;
+  }],
+  ['wrong David fundraiser supporter count', (world) => {
+    const campaign = fundraiser(world, (item) => item.title === 'Roswell Veterans Resource Day Fund');
+    const row = fundraiserSupport(world, (item) => item.fundraiserId === campaign.id);
+    const destination = fundraiser(world, (item) => item.id !== campaign.id
+      && item.status === 'active' && item.endDate >= '2026-08-30'
+      && item.goalAmountCents >= row.amountCents
+      && !world.fundraiserSupports.some((support) => support.userId === row.userId
+        && support.fundraiserId === item.id));
+    row.fundraiserId = destination.id;
+    resetFundraiserSupportId(row);
+  }],
+  ['missing Maya support on David fundraiser', (world) => {
+    const maya = world.users.find((item) => item.displayName === 'Maya Ellis');
+    const campaign = fundraiser(world, (item) => item.title === 'Roswell Veterans Resource Day Fund');
+    const row = fundraiserSupport(world, (item) => item.fundraiserId === campaign.id
+      && item.userId === maya.id);
+    const existing = new Set(world.fundraiserSupports.filter((item) => item.fundraiserId === campaign.id).map((item) => item.userId));
+    row.userId = world.users.find((item) => !existing.has(item.id) && item.id !== campaign.creatorUserId).id;
+    resetFundraiserSupportId(row);
+  }],
+  ['David fundraiser self-support', (world) => {
+    const david = world.users.find((item) => item.displayName === 'David Mercer');
+    const campaign = fundraiser(world, (item) => item.title === 'Roswell Veterans Resource Day Fund');
+    const row = fundraiserSupport(world, (item) => item.fundraiserId === campaign.id);
+    row.userId = david.id;
+    resetFundraiserSupportId(row);
+  }],
+  ['wrong Riverlight fundraiser total', (world) => {
+    const campaign = fundraiser(world, (item) => item.title === "Keep Atlanta's Waterways Clean This Fall");
+    fundraiserSupport(world, (item) => item.fundraiserId === campaign.id && item.amountCents === 5000).amountCents = 10000;
+  }],
+  ['wrong Riverlight fundraiser supporter count', (world) => {
+    const campaign = fundraiser(world, (item) => item.title === "Keep Atlanta's Waterways Clean This Fall");
+    const row = fundraiserSupport(world, (item) => item.fundraiserId === campaign.id);
+    const destination = fundraiser(world, (item) => item.id !== campaign.id
+      && item.status === 'active' && item.endDate >= '2026-08-30'
+      && item.goalAmountCents >= row.amountCents
+      && !world.fundraiserSupports.some((support) => support.userId === row.userId
+        && support.fundraiserId === item.id));
+    row.fundraiserId = destination.id;
+    resetFundraiserSupportId(row);
+  }],
+  ['wrong Mosaic fundraiser total', (world) => {
+    const campaign = fundraiser(world, (item) => item.title === 'Summer Meal Box Fund');
+    fundraiserSupport(world, (item) => item.fundraiserId === campaign.id && item.amountCents === 5000).amountCents = 10000;
+  }],
+  ['Mosaic fundraiser no longer ended', (world) => {
+    fundraiser(world, (item) => item.title === 'Summer Meal Box Fund').endDate = '2026-09-30';
+  }],
 ];
 
 const INTEGRITY_CHECKS = [
   ['manual linked activity excluded from public organization impact', (world) => {
     const before = JSON.stringify([...buildOrganizationPublicImpact(world)]);
     const row = activity(world, (candidate) => candidate.registrationId === null
-      && candidate.manualOrgId !== null);
+      && candidate.manualOrgId !== null
+      && !world.users.find((user) => user.id === candidate.userId).anchor);
     row.hours += 0.5;
     const after = JSON.stringify([...buildOrganizationPublicImpact(world)]);
     return validateWorld(world) && before === after;
+  }],
+  ['supporting a fundraiser does not increase supporter Amount Raised', (world) => {
+    const maya = world.users.find((user) => user.displayName === 'Maya Ellis');
+    const before = deriveAmountRaisedByUser(world).get(maya.id);
+    const authoredIds = new Set(world.fundraisers.slice(0, 4).map((item) => item.id));
+    const row = fundraiserSupport(world, (item, campaign) => (
+      item.userId === maya.id && !authoredIds.has(campaign.id)
+      && item.amountCents === 2500 && campaign.goalAmountCents >= 5000
+    ));
+    const priorProgress = deriveFundraiserProgress(world).get(row.fundraiserId).amountRaisedCents;
+    row.amountCents = 5000;
+    const after = deriveAmountRaisedByUser(world).get(maya.id);
+    const nextProgress = deriveFundraiserProgress(world).get(row.fundraiserId).amountRaisedCents;
+    return validateWorld(world) && before === after && nextProgress === priorProgress + 2500;
   }],
 ];
 

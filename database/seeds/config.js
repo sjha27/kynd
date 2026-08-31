@@ -107,6 +107,37 @@ const CONFIG = Object.freeze({
     },
   },
 
+  // Milestone 6 product decisions. Fundraiser progress and personal Amount
+  // Raised are always derived from fundraiser-support relationships.
+  fundraiserTargets: {
+    creators: {
+      user: 175,
+      organization: 75,
+      userByTier: { light: 30, regular: 65, highly_active: 55, connector: 25 },
+      organizationByTier: { community: 20, established: 35, high_visibility: 20 },
+    },
+    lifecycle: { open: 150, ended: 80, cancelled: 20 },
+    beneficiaries: {
+      linkedKynd: 170,
+      external: 80,
+      userLinkedKynd: 105,
+      userExternal: 70,
+      organizationSelf: 55,
+      organizationOtherKynd: 10,
+      organizationExternal: 10,
+    },
+    supports: { open: 900, ended: 600, cancelled: 0 },
+    supporterPoolSize: 400,
+    imageCoverage: 0.86,
+    goalBounds: { minimum: 25000, maximum: 2000000 },
+    anchors: {
+      maya: { goal: 100000, raised: 65000, supporters: 10 },
+      david: { goal: 250000, raised: 185000, supporters: 15 },
+      riverlight: { goal: 500000, raised: 420000, supporters: 24 },
+      mosaic: { goal: 250000, raised: 275000, supporters: 20 },
+    },
+  },
+
   userTiers: [
     { name: 'light', weight: 0.55 },
     { name: 'regular', weight: 0.30 },
