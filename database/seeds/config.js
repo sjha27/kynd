@@ -35,6 +35,31 @@ const CONFIG = Object.freeze({
     cancelled: 0.05,
   },
 
+  // Milestone 3 product decisions. Keep these exact so validation
+  // protects the intended Discover marketplace composition.
+  opportunityTargets: {
+    hosts: {
+      organization: 1700,
+      user: 300,
+    },
+    types: {
+      volunteer: 1700,
+      charityEvent: 300,
+    },
+    time: {
+      upcoming: 1000,
+      recentPast: 700,
+      fartherFuture: 200,
+      cancelled: 100,
+    },
+    geography: {
+      online: 800,
+      physical: 1200,
+      atlantaMetroPhysical: 960,
+      otherGeorgiaPhysical: 240,
+    },
+  },
+
   userTiers: [
     { name: 'light', weight: 0.55 },
     { name: 'regular', weight: 0.30 },

@@ -3,6 +3,10 @@ const { createRng, randomInt, pick, chance, weightedPick } = require('./lib/rand
 const { deterministicUuid } = require('./lib/ids');
 const { validateWorld } = require('./lib/validate');
 const {
+  generateOpportunities,
+  buildOpportunityDiagnostics,
+} = require('./lib/opportunities');
+const {
   CAUSES, FIRST_NAMES, LAST_NAMES, ATLANTA_METRO_LOCATIONS,
   GEORGIA_LOCATIONS, ORGANIZATION_PREFIXES, ORGANIZATION_NOUNS, USER_BIOS,
 } = require('./data/content');
@@ -399,6 +403,7 @@ function buildDiagnostics(world) {
       organizationCauses: world.organizationCauses.length,
       userFollows: world.userFollows.length,
       organizationFollows: world.organizationFollows.length,
+      opportunities: world.opportunities.length,
     },
     userPopulation: {
       byActivityTier: Object.fromEntries(CONFIG.userTiers.map(({ name }) => [
@@ -433,6 +438,7 @@ function buildDiagnostics(world) {
       ),
     },
     anchors,
+    opportunities: buildOpportunityDiagnostics(world),
   };
 }
 
@@ -445,10 +451,11 @@ function generateWorld() {
   const organizationCauses = generateOrganizationCauses(rng, organizations, causes);
   const userFollows = generateUserFollows(rng, users);
   const organizationFollows = generateOrganizationFollows(rng, users, organizations);
+  const opportunities = generateOpportunities(rng, causes, users, organizations);
   const world = {
     metadata: { seed: CONFIG.seed, anchorDate: CONFIG.anchorDate },
     causes, users, organizations, userCauses,
-    organizationCauses, userFollows, organizationFollows,
+    organizationCauses, userFollows, organizationFollows, opportunities,
   };
   validateWorld(world);
   return world;

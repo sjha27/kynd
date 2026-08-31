@@ -1,5 +1,6 @@
 const CONFIG = require('../config');
 const { CAUSES } = require('../data/content');
+const { validateOpportunities } = require('./validate_opportunities');
 
 const UUID_V5_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -117,7 +118,7 @@ function validateWorld(world) {
   assert(world && typeof world === 'object', 'world must be an object');
   for (const collection of [
     'causes', 'users', 'organizations', 'userCauses',
-    'organizationCauses', 'userFollows', 'organizationFollows',
+    'organizationCauses', 'userFollows', 'organizationFollows', 'opportunities',
   ]) {
     assert(Array.isArray(world[collection]), `${collection} must be an array`);
   }
@@ -251,6 +252,8 @@ function validateWorld(world) {
     'Community Roots Atlanta', 'Bright Futures Lab',
     'Northstar Veterans Network', 'Bridgeway Youth Collaborative',
   ]);
+
+  validateOpportunities(world);
 
   return true;
 }
