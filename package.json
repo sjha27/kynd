@@ -4,14 +4,17 @@
   "private": true,
   "description": "Kynd demo database tooling and application",
   "workspaces": [
-    "backend"
+    "backend",
+    "frontend"
   ],
   "scripts": {
     "loader:dry-run": "node database/loader/load.js --dry-run",
     "loader:validate": "node --test database/loader/validate_loader.js",
     "db:load": "node database/loader/load.js",
     "backend:dev": "npm run dev --workspace=backend",
-    "backend:test": "npm run test --workspace=backend"
+    "backend:test": "npm run test --workspace=backend",
+    "frontend:dev": "npm run dev --workspace=frontend",
+    "frontend:build": "npm run build --workspace=frontend"
   },
   "dependencies": {
     "pg": "^8.16.3"

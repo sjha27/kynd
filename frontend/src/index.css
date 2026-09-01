@@ -1,0 +1,88 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #f5f5f4;
+  color: #1c1c1c;
+}
+
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+}
+
+.page-header h1 {
+  font-size: 1.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.notice {
+  color: #6b6b6b;
+  font-size: 0.9rem;
+  margin: 0 0 1rem;
+}
+
+.page-header button {
+  margin-bottom: 1.5rem;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #e2e2e0;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.card h2 {
+  font-size: 1rem;
+  margin: 0 0 0.75rem;
+}
+
+.state-loading {
+  color: #6b6b6b;
+}
+
+.state-error {
+  color: #b3261e;
+}
+
+.state-error button {
+  margin-top: 0.5rem;
+}
+
+button {
+  font: inherit;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid #1c1c1c;
+  border-radius: 6px;
+  background: #1c1c1c;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.state-error button {
+  background: #ffffff;
+  color: #b3261e;
+  border-color: #b3261e;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 0.75rem;
+  margin: 0;
+}
+
+.fields dt {
+  font-weight: 600;
+  color: #6b6b6b;
+}
+
+.fields dd {
+  margin: 0;
+}
