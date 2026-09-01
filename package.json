@@ -1,0 +1,14 @@
+{
+  "name": "kynd",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Kynd demo database tooling",
+  "scripts": {
+    "loader:dry-run": "node database/loader/load.js --dry-run",
+    "loader:validate": "node --test database/loader/validate_loader.js",
+    "db:load": "node database/loader/load.js"
+  },
+  "dependencies": {
+    "pg": "^8.16.3"
+  }
+}
