@@ -1,6 +1,10 @@
 const CONFIG = require('../config');
 const { chance, pick, randomInt, weightedPick } = require('./random');
-const { deterministicUuid } = require('./ids');
+const { deterministicUuid, stablePick } = require('./ids');
+const {
+  haversineMiles,
+  userOpportunityMiles,
+} = require('./geography');
 const {
   EXTERNAL_ACTIVITY_ORGANIZATIONS,
   MANUAL_ACTIVITY_TITLES,
@@ -16,6 +20,29 @@ const MANUAL_HOURS = Object.freeze([
   { value: 4, weight: 10 }, { value: 5, weight: 6 },
   { value: 6, weight: 4 }, { value: 8, weight: 3 },
 ]);
+
+const ANCHOR_KYND_ACTIVITY_OVERRIDES = Object.freeze({
+  'e9c03813-a217-53f7-a857-6cbf5b689e76': { hours: 4, story: 'Worked alongside neighbors to refresh a shared space and prepare it for the next gathering.', imageUrl: '/demo-assets/activities/community/kynd-4.jpg', createdAt: '2026-03-21T08:00:00.000Z' },
+  '376ae75f-2125-5def-8ba9-27829c1bdddf': { hours: 4, story: 'Spent the morning clearing litter along the trail and helping reset a few overgrown sections.', imageUrl: '/demo-assets/activities/environment/kynd-5.jpg', createdAt: '2026-04-15T09:05:00.000Z' },
+  '697c33a8-63e3-5928-88a3-45e68164fd43': { hours: 4, story: 'Worked alongside neighbors to refresh a shared space and prepare it for the next gathering.', imageUrl: '/demo-assets/activities/community/kynd-6.jpg', createdAt: '2026-05-23T18:58:00.000Z' },
+  '3717cad9-aa45-5f72-959e-917fb1d734ec': { hours: 3, story: 'Packed meal boxes with a great crew and helped organize the final pickup tables.', imageUrl: null, createdAt: '2026-07-14T13:40:00.000Z' },
+  '631b9a75-7fe3-5ff7-b027-654f70b72b74': { hours: 4, story: 'Worked alongside neighbors to refresh a shared space and prepare it for the next gathering.', imageUrl: '/demo-assets/activities/community/kynd-10.jpg', createdAt: '2026-03-21T04:23:00.000Z' },
+  '9c0e533b-26d3-52da-806d-f2366cba820c': { hours: 4, story: 'Worked alongside neighbors to refresh a shared space and prepare it for the next gathering.', imageUrl: '/demo-assets/activities/community/kynd-11.jpg', createdAt: '2026-03-30T22:43:00.000Z' },
+  '3c5e82f3-26b0-5024-b163-4d0b889af1c7': { hours: 1.5, story: 'Set up learning materials and supported students as they worked through the activity stations.', imageUrl: '/demo-assets/activities/education/kynd-0.jpg', createdAt: '2026-05-07T00:53:00.000Z' },
+  '38bbd51f-2b34-594a-af07-149b7f5c2a95': { hours: 4, story: 'Prepared career materials and helped the workshop team keep each session running smoothly.', imageUrl: null, createdAt: '2026-06-11T23:18:00.000Z' },
+  'e49f883f-8389-5465-b062-1e23e4d782be': { hours: 5, story: null, imageUrl: '/demo-assets/activities/community/kynd-2.jpg', createdAt: '2026-06-21T01:52:00.000Z' },
+  '6fc01e98-d7bb-56d5-96e2-d95bb7b01d85': { hours: 1, story: null, imageUrl: '/demo-assets/activities/education/kynd-3.jpg', createdAt: '2026-06-25T07:58:00.000Z' },
+  'e4f4c198-47e0-5db6-96f7-a7888aa132c1': { hours: 2, story: null, imageUrl: null, createdAt: '2026-06-27T23:36:00.000Z' },
+  'e8691f7a-ba3c-5f5e-bd9b-7bca1c824240': { hours: 3, story: 'Spent a few hours on practical neighborhood work with a crew that made the day feel easy.', imageUrl: null, createdAt: '2026-07-12T01:46:00.000Z' },
+  'a0698bf0-0440-5470-af49-08a3d405c297': { hours: 2, story: null, imageUrl: '/demo-assets/activities/veterans/kynd-6.jpg', createdAt: '2026-08-08T03:11:00.000Z' },
+});
+
+const ANCHOR_MANUAL_ACTIVITY_OVERRIDES = Object.freeze({
+  'Maya Ellis|1': { occurredOn: '2026-08-16', title: 'Westside Community Garden Morning', story: 'Spent a few hours on practical neighborhood work with a crew that made the day feel easy.', imageUrl: '/demo-assets/activities/community/manual-0.jpg', createdAt: '2026-08-17T15:37:00.000Z' },
+  'David Mercer|1': { occurredOn: '2026-06-12', title: 'Neighborhood Welcome Day', story: 'Spent a few hours on practical neighborhood work with a crew that made the day feel easy.', imageUrl: '/demo-assets/activities/community/manual-1.jpg', createdAt: '2026-06-13T12:19:00.000Z' },
+  'David Mercer|2': { occurredOn: '2026-03-19', title: 'Community Tutoring Session', story: 'Worked with students on assignments and helped them prepare for next week’s project.', imageUrl: '/demo-assets/activities/education/manual-2.jpg', createdAt: '2026-03-21T13:32:00.000Z' },
+  'David Mercer|3': { occurredOn: '2026-01-25', title: 'Career Workshop Support', story: 'Prepared career materials and helped the workshop team keep each session running smoothly.', imageUrl: null, createdAt: '2026-01-28T19:14:00.000Z' },
+});
 
 function shuffled(rng, values) {
   const result = [...values];
@@ -90,6 +117,36 @@ function selectedKyndRegistrations(rng, world, maya, david) {
   ]);
   const selected = [];
 
+  function completionTravelWeight(user, opportunity) {
+    if (opportunity.isOnline || user.anchor) return 1;
+    const miles = userOpportunityMiles(user, opportunity);
+    if (miles <= 5) return 1.75;
+    if (miles <= 15) return 1.4;
+    if (miles <= 30) return 1;
+    if (miles <= 60) return 0.48;
+    if (miles <= 100) return 0.16;
+    return 0.018;
+  }
+
+  function implausiblePair(first, second) {
+    const firstOpportunity = opportunityById.get(first.opportunityId);
+    const secondOpportunity = opportunityById.get(second.opportunityId);
+    if (firstOpportunity.isOnline || secondOpportunity.isOnline) return false;
+    if (localCalendarDate(firstOpportunity.startsAt)
+      !== localCalendarDate(secondOpportunity.startsAt)) return false;
+    const betweenMiles = haversineMiles(
+      { latitude: firstOpportunity.latitude, longitude: firstOpportunity.longitude },
+      { latitude: secondOpportunity.latitude, longitude: secondOpportunity.longitude }
+    );
+    const ordered = [firstOpportunity, secondOpportunity].sort((a, b) => (
+      new Date(a.startsAt) - new Date(b.startsAt)
+    ));
+    const gapHours = Math.max(0, (
+      new Date(ordered[1].startsAt) - new Date(ordered[0].endsAt)
+    ) / 3600000);
+    return betweenMiles > 60 && betweenMiles > Math.max(30, gapHours * 55);
+  }
+
   for (const tier of Object.keys(CONFIG.activityTargets.kyndByUserTier)) {
     const target = CONFIG.activityTargets.kyndByUserTier[tier];
     const tierUsers = new Set(world.users.filter((user) => user.tier === tier).map((user) => user.id));
@@ -100,22 +157,64 @@ function selectedKyndRegistrations(rng, world, maya, david) {
     const propensity = new Map(world.users.filter((user) => tierUsers.has(user.id)).map((user) => [
       user.id, 0.65 + rng() * 0.7,
     ]));
-    const candidates = eligible
+    const rankedCandidates = eligible
       .filter((row) => tierUsers.has(row.userId)
         && !zeroKyndUsers.has(row.userId) && !anchorUserIds.has(row.userId))
       .map((row) => ({
         row,
-        key: -Math.log(Math.max(rng(), Number.EPSILON)) / propensity.get(row.userId),
+        key: -Math.log(Math.max(rng(), Number.EPSILON)) / (
+          propensity.get(row.userId)
+          * completionTravelWeight(
+            world.users.find((user) => user.id === row.userId),
+            opportunityById.get(row.opportunityId)
+          )
+        ),
       }))
-      .sort((first, second) => first.key - second.key || first.row.id.localeCompare(second.row.id))
-      .slice(0, target - forced.length)
-      .map(({ row }) => row);
+      .sort((first, second) => first.key - second.key || first.row.id.localeCompare(second.row.id));
+    const candidates = [];
+    const selectedByUser = new Map();
+    for (const { row } of rankedCandidates) {
+      if (candidates.length === target - forced.length) break;
+      const user = world.users.find((candidate) => candidate.id === row.userId);
+      const item = opportunityById.get(row.opportunityId);
+      const prior = selectedByUser.get(user.id) || [];
+      const longDistanceCount = prior.filter((candidate) => {
+        const candidateOpportunity = opportunityById.get(candidate.opportunityId);
+        return !candidateOpportunity.isOnline
+          && userOpportunityMiles(user, candidateOpportunity) > 100;
+      }).length;
+      if (!item.isOnline && userOpportunityMiles(user, item) > 100 && longDistanceCount >= 2) continue;
+      if (prior.some((candidate) => implausiblePair(candidate, row))) continue;
+      candidates.push(row);
+      prior.push(row);
+      selectedByUser.set(user.id, prior);
+    }
     if (forced.length + candidates.length !== target) {
       throw new Error(`Unable to allocate ${target} Kynd activities for ${tier}`);
     }
     selected.push(...forced, ...candidates);
   }
   return { eligible, selected, zeroKyndUsers };
+}
+
+function diversifiedManualTitle(baseTitle, spec) {
+  const modifiers = [
+    'with Neighbors', 'Community Shift', 'Local Team',
+    'Volunteer Session', 'Hands-On Day', 'Shared Service',
+  ];
+  return `${baseTitle} — ${stablePick('manual-activity-title', spec.key, modifiers)}`;
+}
+
+function diversifiedStory(baseStory, key) {
+  const reflections = [
+    'The team made steady progress and left a clear handoff for the next group.',
+    'It was a practical few hours with neighbors who kept the work moving.',
+    'The host explained how the work connects to the program beyond this one shift.',
+    'I appreciated having a clear role and seeing what the group completed together.',
+    'We wrapped up by organizing materials and sharing a quick update with the coordinator.',
+    'The small-group format made it easy to contribute and learn from the people there.',
+  ];
+  return `${baseStory} ${stablePick('activity-story-reflection', key, reflections)}`;
 }
 
 function allocateManualQuotas(rng, world, maya, david, zeroKyndUsers) {
@@ -202,7 +301,7 @@ function kyndActivity(rng, row, index, world, maps, anchorSequence) {
   anchorSequence.set(user.id, anchorIndex + 1);
   const hasStory = forceStory || chance(rng, 0.35);
   const hasImage = forceImage || chance(rng, 0.28);
-  return {
+  const activity = {
     id: deterministicUuid('activity-registration', row.id),
     userId: row.userId,
     registrationId: row.id,
@@ -212,12 +311,17 @@ function kyndActivity(rng, row, index, world, maps, anchorSequence) {
     manualCauseId: null,
     manualOrgId: null,
     manualOrgName: null,
-    story: hasStory ? pick(rng, ACTIVITY_STORIES[cause.name]) : null,
+    story: hasStory
+      ? (user.anchor
+        ? pick(rng, ACTIVITY_STORIES[cause.name])
+        : diversifiedStory(pick(rng, ACTIVITY_STORIES[cause.name]), row.id))
+      : null,
     imageUrl: hasImage
       ? `/demo-assets/activities/${cause.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/kynd-${index % 12}.jpg`
       : null,
     createdAt: confirmationTimestamp(rng, opportunity.endsAt),
   };
+  return { ...activity, ...(ANCHOR_KYND_ACTIVITY_OVERRIDES[row.id] || {}) };
 }
 
 function manualOccurredOn(rng, spec, user, usedDates) {
@@ -284,7 +388,7 @@ function chooseManualConcept(rng, spec, user, world, maps) {
       ? pick(rng, matchingCauses) : pick(rng, organization.causes);
     const cause = maps.causeByName.get(causeName);
     return {
-      title: pick(rng, MANUAL_ACTIVITY_TITLES[causeName]), cause,
+      title: diversifiedManualTitle(pick(rng, MANUAL_ACTIVITY_TITLES[causeName]), spec), cause,
       organization, organizationName: organization.name,
     };
   }
@@ -296,7 +400,7 @@ function chooseManualConcept(rng, spec, user, world, maps) {
   const external = pick(rng, candidates);
   const cause = maps.causeByName.get(external.cause);
   return {
-    title: pick(rng, MANUAL_ACTIVITY_TITLES[cause.name]), cause,
+    title: diversifiedManualTitle(pick(rng, MANUAL_ACTIVITY_TITLES[cause.name]), spec), cause,
     organization: null, organizationName: external.name,
   };
 }
@@ -304,7 +408,9 @@ function chooseManualConcept(rng, spec, user, world, maps) {
 function manualActivity(rng, spec, index, world, maps, usedDatesByUser) {
   const user = maps.userById.get(spec.userId);
   const usedDates = usedDatesByUser.get(user.id);
-  const occurredOn = manualOccurredOn(rng, spec, user, usedDates);
+  const authored = ANCHOR_MANUAL_ACTIVITY_OVERRIDES[`${user.displayName}|${spec.sequence}`];
+  const generatedOccurredOn = manualOccurredOn(rng, spec, user, usedDates);
+  const occurredOn = authored?.occurredOn || generatedOccurredOn;
   usedDates.add(occurredOn);
   const concept = chooseManualConcept(rng, spec, user, world, maps);
   const forceStory = user.anchor;
@@ -323,12 +429,22 @@ function manualActivity(rng, spec, index, world, maps, usedDatesByUser) {
     manualCauseId: concept.cause.id,
     manualOrgId: concept.organization?.id || null,
     manualOrgName: concept.organizationName,
-    story: hasStory ? pick(rng, ACTIVITY_STORIES[concept.cause.name]) : null,
+    story: hasStory
+      ? (user.anchor
+        ? pick(rng, ACTIVITY_STORIES[concept.cause.name])
+        : diversifiedStory(pick(rng, ACTIVITY_STORIES[concept.cause.name]), spec.key))
+      : null,
     imageUrl: hasImage
       ? `/demo-assets/activities/${concept.cause.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/manual-${index % 10}.jpg`
       : null,
     createdAt: manualCreatedAt(rng, occurredOn, user),
   };
+  if (authored) {
+    activity.manualTitle = authored.title;
+    activity.story = authored.story;
+    activity.imageUrl = authored.imageUrl;
+    activity.createdAt = authored.createdAt;
+  }
   return {
     id: deterministicUuid('activity-manual', [
       activity.userId, activity.occurredOn, activity.manualTitle, activity.manualOrgName,

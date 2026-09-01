@@ -295,8 +295,8 @@ function validateAnchors(world, maps) {
   const davidActivity = world.activities.find((item) => {
     if (item.userId !== david.id || !item.registrationId) return false;
     const registration = maps.registrationById.get(item.registrationId);
-    return maps.opportunityById.get(registration.opportunityId).title
-      === 'Veterans Care Package Assembly';
+    return registration.opportunityId
+      === deterministicUuid('opportunity', 'generated-0580');
   });
   const flagship = world.opportunities.find((item) => item.flagship);
   const mayaFundraiser = world.fundraisers.find(

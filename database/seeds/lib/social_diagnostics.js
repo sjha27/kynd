@@ -1,4 +1,5 @@
 const CONFIG = require('../config');
+const { deterministicUuid } = require('./ids');
 const {
   deriveProfileMetrics,
   buildOrganizationPublicImpact,
@@ -446,9 +447,11 @@ function buildSocialDiagnostics(world) {
   const mayaActivity = world.activities.find((item) => (
     item.userId === maya.id && item.manualTitle === 'Westside Community Garden Morning'
   ));
-  const davidActivity = world.activities.find((item) => (
-    item.userId === david.id && activityTitle(item, maps) === 'Veterans Care Package Assembly'
-  ));
+  const davidActivity = world.activities.find((item) => {
+    if (item.userId !== david.id || !item.registrationId) return false;
+    return maps.registrationById.get(item.registrationId).opportunityId
+      === deterministicUuid('opportunity', 'generated-0580');
+  });
   const flagship = world.opportunities.find((item) => item.flagship);
   const anchorFundraiser = (title) => world.fundraisers.find((item) => item.title === title);
   const categoryCounts = {};

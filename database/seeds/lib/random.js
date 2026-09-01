@@ -1,7 +1,7 @@
 function createRng(seed) {
   let state = seed >>> 0;
 
-  return function rng() {
+  function rng() {
     state += 0x6D2B79F5;
 
     let value = state;
@@ -9,7 +9,11 @@ function createRng(seed) {
     value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
 
     return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  }
+  rng.skip = (count) => {
+    state = (state + 0x6D2B79F5 * count) >>> 0;
   };
+  return rng;
 }
 
 function randomInt(rng, min, max) {

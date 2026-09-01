@@ -1,5 +1,6 @@
 const CONFIG = require('../config');
 const { deterministicUuid } = require('./ids');
+const { ANCHOR_SAVES } = require('./participation');
 
 const UUID_V5_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const VALID_STATUSES = new Set(['joined', 'cancelled']);
@@ -145,6 +146,13 @@ function validateParticipation(world) {
     assert(savedAt <= anchor, `saved opportunity ${pair} is after anchor snapshot`);
     assert(savedAt < timestamp(`${pair} opportunity start`, opportunity.startsAt),
       `saved opportunity ${pair} is after opportunity start`);
+  }
+  for (const [name, expected] of Object.entries(ANCHOR_SAVES)) {
+    const user = world.users.find((candidate) => candidate.displayName === name);
+    const actual = world.savedOpportunities.filter((row) => row.userId === user.id)
+      .map((row) => [row.opportunityId, row.savedAt]);
+    assert(JSON.stringify(actual) === JSON.stringify(expected),
+      `${name} approved saved-Opportunity history changed`);
   }
   return true;
 }

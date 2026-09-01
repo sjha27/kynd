@@ -1,6 +1,6 @@
 const CONFIG = require('./config');
 const { createRng, randomInt, pick, chance, weightedPick } = require('./lib/random');
-const { deterministicUuid } = require('./lib/ids');
+const { deterministicUuid, stableUnitInterval } = require('./lib/ids');
 const { validateWorld } = require('./lib/validate');
 const {
   generateOpportunities,
@@ -14,6 +14,7 @@ const { generateFundraising } = require('./lib/fundraisers');
 const { buildFundraiserDiagnostics } = require('./lib/fundraiser_diagnostics');
 const { generateSocial } = require('./lib/social');
 const { buildSocialDiagnostics } = require('./lib/social_diagnostics');
+const { buildRealismDiagnostics } = require('./lib/realism');
 const {
   CAUSES, FIRST_NAMES, LAST_NAMES, ATLANTA_METRO_LOCATIONS,
   GEORGIA_LOCATIONS, ORGANIZATION_PREFIXES, ORGANIZATION_NOUNS, USER_BIOS,
@@ -32,6 +33,9 @@ const USER_VISIBILITY_BONUS = Object.freeze({
 const ORGANIZATION_VISIBILITY_BONUS = Object.freeze({
   community: 0, established: 2, high_visibility: 5,
 });
+// Frozen M7 stream checkpoints keep later milestone generators stable when
+// realism corrections alter the number of earlier-stage retry draws.
+const RNG_CHECKPOINTS = Object.freeze({ fundraising: 481352, social: 492642 });
 const ATLANTA_METRO_KEYS = new Set(
   ATLANTA_METRO_LOCATIONS.map(({ city, state }) => `${city}|${state}`)
 );
@@ -127,6 +131,27 @@ function generateUsers(rng) {
   return users;
 }
 
+function assignUserAvatars(users) {
+  const selectedIds = new Set(users.filter((user) => user.anchor).map((user) => user.id));
+  for (const { name } of CONFIG.userTiers) {
+    const selected = users
+      .filter((user) => !user.anchor && user.tier === name)
+      .map((user) => ({
+        user,
+        rank: stableUnitInterval('user-avatar-rank', user.id),
+      }))
+      .sort((first, second) => first.rank - second.rank
+        || first.user.id.localeCompare(second.user.id))
+      .slice(0, 12);
+    for (const { user } of selected) selectedIds.add(user.id);
+  }
+  for (const user of users) {
+    user.avatarUrl = selectedIds.has(user.id)
+      ? `/demo-assets/avatars/${user.displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${user.id.slice(0, 8)}.webp`
+      : null;
+  }
+}
+
 function generatedOrganizationName(index) {
   const prefixIndex = index % ORGANIZATION_PREFIXES.length;
   const nounIndex = Math.floor(index / ORGANIZATION_PREFIXES.length)
@@ -175,6 +200,29 @@ function generateOrganizations(rng) {
     generatedIndex += 1;
   }
   return organizations;
+}
+
+function assignOrganizationLogos(organizations) {
+  const selectedIds = new Set(
+    organizations.filter((organization) => organization.anchor).map((organization) => organization.id)
+  );
+  for (const { name } of CONFIG.organizationTiers) {
+    const selected = organizations
+      .filter((organization) => !organization.anchor && organization.tier === name)
+      .map((organization) => ({
+        organization,
+        rank: stableUnitInterval('organization-logo-rank', organization.id),
+      }))
+      .sort((first, second) => first.rank - second.rank
+        || first.organization.id.localeCompare(second.organization.id))
+      .slice(0, 5);
+    for (const { organization } of selected) selectedIds.add(organization.id);
+  }
+  for (const organization of organizations) {
+    organization.logoUrl = selectedIds.has(organization.id)
+      ? `/demo-assets/organizations/${organization.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${organization.id.slice(0, 8)}.svg`
+      : null;
+  }
 }
 
 function generateUserCauses(rng, users, causes) {
@@ -458,6 +506,7 @@ function buildDiagnostics(world) {
     activities: buildActivityDiagnostics(world),
     fundraising: buildFundraiserDiagnostics(world),
     social: buildSocialDiagnostics(world),
+    realism: buildRealismDiagnostics(world),
   };
 }
 
@@ -466,6 +515,8 @@ function generateWorld() {
   const causes = generateCauses();
   const users = generateUsers(rng);
   const organizations = generateOrganizations(rng);
+  assignUserAvatars(users);
+  assignOrganizationLogos(organizations);
   const userCauses = generateUserCauses(rng, users, causes);
   const organizationCauses = generateOrganizationCauses(rng, organizations, causes);
   const userFollows = generateUserFollows(rng, users);
@@ -480,9 +531,13 @@ function generateWorld() {
   const participationWorld = { ...foundation, registrations, savedOpportunities };
   const activities = generateActivities(rng, participationWorld);
   const activityWorld = { ...participationWorld, activities };
-  const { fundraisers, fundraiserSupports } = generateFundraising(rng, activityWorld);
+  const fundraisingRng = createRng(CONFIG.seed);
+  fundraisingRng.skip(RNG_CHECKPOINTS.fundraising);
+  const { fundraisers, fundraiserSupports } = generateFundraising(fundraisingRng, activityWorld);
   const fundraisingWorld = { ...activityWorld, fundraisers, fundraiserSupports };
-  const { reactions, comments } = generateSocial(rng, fundraisingWorld);
+  const socialRng = createRng(CONFIG.seed);
+  socialRng.skip(RNG_CHECKPOINTS.social);
+  const { reactions, comments } = generateSocial(socialRng, fundraisingWorld);
   const world = { ...fundraisingWorld, reactions, comments };
   validateWorld(world);
   return world;

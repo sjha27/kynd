@@ -1,6 +1,6 @@
 const CONFIG = require('../config');
 const { randomInt, pick, chance, weightedPick } = require('./random');
-const { deterministicUuid } = require('./ids');
+const { deterministicUuid, stablePick, stableUnitInterval } = require('./ids');
 const {
   OPPORTUNITY_ARCHETYPES,
   PHYSICAL_LOCATIONS,
@@ -167,6 +167,79 @@ function createdBeforeStart(rng, hostCreatedAt, startsAt) {
     );
   }
   return new Date(lower + Math.floor(rng() * (upper - lower + 1))).toISOString();
+}
+
+function generatedCharityCapacity(key, mode, legacyCapacity) {
+  const roll = stableUnitInterval('charity-capacity-band', key);
+  const pools = mode === 'online'
+    ? {
+      small: [12, 15, 18, 20, 24],
+      community: [30, 35, 40, 50],
+      regional: [60, 75, 100],
+    }
+    : {
+      small: [12, 15, 18, 20, 24],
+      community: [30, 35, 40, 50],
+      regional: [60, 75, 100],
+    };
+  if (roll < 0.28) return stablePick('charity-capacity-small', key, pools.small);
+  if (roll < 0.60) return stablePick('charity-capacity-community', key, pools.community);
+  if (roll < 0.82) return stablePick('charity-capacity-regional', key, pools.regional);
+  return legacyCapacity;
+}
+
+function diversifiedOpportunityCopy(key, baseTitle, archetype, location) {
+  const physicalModifiers = [
+    `${location?.city || 'Local'} Crew`, 'Local Action Day', 'Neighbor Meetup', 'Community Edition',
+    'Morning Team', 'Weekend Session', 'Hands-On Day', 'Fall Gathering',
+    'Small-Group Shift', 'Open Community', 'Local Workday', 'Neighborhood Team',
+  ];
+  const onlineModifiers = [
+    'Online Meetup', 'Remote Team', 'Virtual Session', 'Community Online',
+    'Evening Online', 'Remote Workgroup', 'Digital Gathering', 'Virtual Team',
+    'Online Workday', 'Open Session', 'Community Call', 'Remote Workshop',
+  ];
+  const titleModifier = stablePick(
+    'opportunity-title-modifier', key, location ? physicalModifiers : onlineModifiers
+  );
+  const setting = location ? `in ${location.city}` : 'in a facilitated online room';
+  const descriptionDetails = [
+    `The session is designed for neighbors who want a practical way to contribute ${setting}.`,
+    `Participants will work in a welcoming group with clear guidance from the host team ${setting}.`,
+    `This is a focused, community-scale opportunity with an approachable role for each participant ${setting}.`,
+    `The host will connect the work to its local impact and help participants find a useful role ${setting}.`,
+    `The format balances hands-on contribution with time to learn about the program's ongoing work ${setting}.`,
+    `New and returning participants can contribute at a comfortable pace alongside the host team ${setting}.`,
+    `The gathering offers a concrete next step for people who care about this cause ${setting}.`,
+    `Participants will see how a short shared effort supports the host's broader community work ${setting}.`,
+  ];
+  const taskDetails = [
+    'The host will divide the group into clear roles and close with a short team reset.',
+    'Participants will check in together, choose a role, and help leave materials ready for the next group.',
+    'A coordinator will demonstrate the workflow before participants move into small teams.',
+    'The group will share progress midway through the session and finish with an organized handoff.',
+    'Participants can rotate between two practical roles based on comfort and experience.',
+    'The host team will provide a brief kickoff, role cards, and a clear end-of-session wrap-up.',
+    'Work will be organized in small groups so participants can ask questions as they go.',
+    'Participants will follow a simple checklist and help document what the group completes.',
+  ];
+  const requirementDetails = location ? [
+    'Please arrive 10 minutes early for check-in.',
+    'Accessibility questions can be shared with the host before the event.',
+    'Bring a reusable water bottle and review the host note before arrival.',
+    'The host will send final arrival details to registered participants.',
+  ] : [
+    'A brief access note will be sent to registered participants.',
+    'Please join a few minutes early to confirm audio and access.',
+    'Participants may keep cameras off unless a role specifically requires video.',
+    'The host will provide the working links and materials before the session.',
+  ];
+  return {
+    title: `${baseTitle} — ${titleModifier}`,
+    description: `${archetype.description} ${stablePick('opportunity-description', key, descriptionDetails)}`,
+    tasks: `${archetype.tasks} ${stablePick('opportunity-tasks', key, taskDetails)}`,
+    requirements: `${archetype.requirements} ${stablePick('opportunity-requirements', key, requirementDetails)}`,
+  };
 }
 
 function opportunityRow({
@@ -396,20 +469,26 @@ function generateOpportunities(rng, causes, users, organizations) {
       ? null
       : chooseLocation(rng, host, slot.geography, slot.hostType);
     const key = `generated-${String(index + 1).padStart(4, '0')}`;
+    const baseTitle = pick(rng, selectedArchetype.titles);
+    const copy = diversifiedOpportunityCopy(key, baseTitle, selectedArchetype, location);
+    const legacyCapacity = pick(rng, capacities);
+    const capacity = slot.type === 'charity_event'
+      ? generatedCharityCapacity(key, mode, legacyCapacity)
+      : legacyCapacity;
 
     opportunities.push(opportunityRow({
       key,
-      title: pick(rng, selectedArchetype.titles),
+      title: copy.title,
       cause: causeByName.get(causeName),
       type: slot.type,
       host,
       hostType: slot.hostType,
-      description: selectedArchetype.description,
-      tasks: selectedArchetype.tasks,
-      requirements: selectedArchetype.requirements,
+      description: copy.description,
+      tasks: copy.tasks,
+      requirements: copy.requirements,
       startsAt,
       duration,
-      capacity: pick(rng, capacities),
+      capacity,
       status: slot.timeBucket === 'cancelled' ? 'cancelled' : 'published',
       location,
       archetypeKey: selectedArchetype.key,

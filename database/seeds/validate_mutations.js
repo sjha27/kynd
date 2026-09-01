@@ -10,6 +10,7 @@ const {
 } = require('./lib/fundraisers');
 const { deriveProfileMetrics } = require('./lib/activities');
 const { ANCHOR_COMMENTS } = require('./data/social');
+const { CITY_CENTROIDS, userOpportunityMiles } = require('./lib/geography');
 
 const UNKNOWN_UUID = '00000000-0000-5000-8000-000000000000';
 
@@ -97,6 +98,18 @@ function resetManualActivityId(row) {
   row.id = deterministicUuid('activity-manual', [
     row.userId, row.occurredOn, row.manualTitle, row.manualOrgName,
   ].join('|'));
+}
+
+function renameManualActivity(world, row, title) {
+  const priorId = row.id;
+  row.manualTitle = title;
+  resetManualActivityId(row);
+  for (const socialRow of [...world.reactions, ...world.comments]) {
+    if (socialRow.activityId !== priorId) continue;
+    socialRow.activityId = row.id;
+    if (socialRow.body === undefined) resetReactionId(socialRow);
+    else resetCommentId(socialRow);
+  }
 }
 
 function useRegistration(world, row, registrationRow) {
@@ -1099,6 +1112,92 @@ const MUTATIONS = [
     const row = reaction(world, (item) => item.fundraiserId === target.id);
     world.reactions.splice(world.reactions.indexOf(row), 1);
   }],
+  ['all charity events below meaningful traction', (world) => {
+    const joined = new Map(world.opportunities.map((item) => [item.id, 0]));
+    for (const row of world.registrations) {
+      if (row.status === 'joined') joined.set(row.opportunityId, joined.get(row.opportunityId) + 1);
+    }
+    for (const item of world.opportunities.filter((candidate) => (
+      candidate.opportunityType === 'charity_event' && !candidate.anchor
+    ))) item.capacity = Math.max(1, joined.get(item.id) * 5);
+  }],
+  ['user with three long-distance completed Activities', (world) => {
+    const registrationById = new Map(world.registrations.map((row) => [row.id, row]));
+    const opportunityById = new Map(world.opportunities.map((item) => [item.id, item]));
+    const candidates = world.users.filter((user) => (
+      !user.anchor && !world.opportunities.some((item) => item.hostUserId === user.id)
+    ));
+    let selected;
+    for (const user of candidates) {
+      const items = world.activities.filter((item) => (
+        item.userId === user.id && item.registrationId
+      )).map((item) => opportunityById.get(registrationById.get(item.registrationId).opportunityId))
+        .filter((item) => !item.isOnline);
+      for (const city of Object.keys(CITY_CENTROIDS)) {
+        const hypothetical = { ...user, city };
+        if (items.filter((item) => userOpportunityMiles(hypothetical, item) > 100).length >= 3) {
+          selected = { user, city };
+          break;
+        }
+      }
+      if (selected) break;
+    }
+    selected.user.city = selected.city;
+  }],
+  ['implausible same-day distant and local completed Activities', (world) => {
+    const registrationById = new Map(world.registrations.map((row) => [row.id, row]));
+    const opportunityById = new Map(world.opportunities.map((item) => [item.id, item]));
+    const groups = new Map();
+    for (const item of world.activities.filter((candidate) => candidate.registrationId)) {
+      const target = opportunityById.get(registrationById.get(item.registrationId).opportunityId);
+      if (target.isOnline || target.anchor) continue;
+      const key = `${item.userId}|${item.occurredOn}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(target);
+    }
+    const [key, items] = [...groups].find(([, targets]) => targets.length >= 2);
+    const user = world.users.find((candidate) => candidate.id === key.split('|')[0]);
+    const local = CITY_CENTROIDS[user.city];
+    const distant = Object.values(CITY_CENTROIDS).find((coordinates) => {
+      const hypothetical = { ...items[1], ...coordinates };
+      return userOpportunityMiles(user, hypothetical) > 100;
+    });
+    items[0].latitude = local.latitude;
+    items[0].longitude = local.longitude;
+    items[1].latitude = distant.latitude;
+    items[1].longitude = distant.longitude;
+  }],
+  ['missing Maya avatar reference', (world) => {
+    world.users.find((user) => user.displayName === 'Maya Ellis').avatarUrl = null;
+  }],
+  ['wrong avatar reference count', (world) => {
+    world.users.find((user) => user.avatarUrl && !user.anchor).avatarUrl = null;
+  }],
+  ['missing anchor organization logo reference', (world) => {
+    world.organizations.find((organization) => organization.anchor).logoUrl = null;
+  }],
+  ['wrong organization logo reference count', (world) => {
+    world.organizations.find((organization) => organization.logoUrl && !organization.anchor)
+      .logoUrl = null;
+  }],
+  ['malformed controlled media path', (world) => {
+    world.users.find((user) => user.avatarUrl && !user.anchor).avatarUrl = '/tmp/avatar.jpg';
+  }],
+  ['collapsed generated Opportunity title diversity', (world) => {
+    for (const item of world.opportunities.filter((candidate) => !candidate.anchor)) {
+      item.title = 'Community Service Day';
+    }
+  }],
+  ['excessively repeated ordinary Opportunity title', (world) => {
+    for (const item of world.opportunities.filter((candidate) => !candidate.anchor).slice(0, 11)) {
+      item.title = 'Repeated Community Opportunity';
+    }
+  }],
+  ['collapsed manual Activity title diversity', (world) => {
+    for (const item of world.activities.filter((candidate) => !candidate.registrationId)) {
+      renameManualActivity(world, item, 'Community Volunteer Shift');
+    }
+  }],
 ];
 
 const INTEGRITY_CHECKS = [
@@ -1112,16 +1211,15 @@ const INTEGRITY_CHECKS = [
     return validateWorld(world) && before === after;
   }],
   ['supporting a fundraiser does not increase supporter Amount Raised', (world) => {
-    const maya = world.users.find((user) => user.displayName === 'Maya Ellis');
-    const before = deriveAmountRaisedByUser(world).get(maya.id);
     const authoredIds = new Set(world.fundraisers.slice(0, 4).map((item) => item.id));
     const row = fundraiserSupport(world, (item, campaign) => (
-      item.userId === maya.id && !authoredIds.has(campaign.id)
-      && item.amountCents === 2500 && campaign.goalAmountCents >= 5000
+      !authoredIds.has(campaign.id) && item.amountCents === 2500
+      && campaign.goalAmountCents >= 5000
     ));
+    const before = deriveAmountRaisedByUser(world).get(row.userId);
     const priorProgress = deriveFundraiserProgress(world).get(row.fundraiserId).amountRaisedCents;
     row.amountCents = 5000;
-    const after = deriveAmountRaisedByUser(world).get(maya.id);
+    const after = deriveAmountRaisedByUser(world).get(row.userId);
     const nextProgress = deriveFundraiserProgress(world).get(row.fundraiserId).amountRaisedCents;
     return validateWorld(world) && before === after && nextProgress === priorProgress + 2500;
   }],

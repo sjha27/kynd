@@ -1,6 +1,7 @@
 const CONFIG = require('../config');
 const { randomInt, weightedPick } = require('./random');
 const { deterministicUuid } = require('./ids');
+const { userOpportunityMiles } = require('./geography');
 
 const REGION_CITIES = new Set([
   'Atlanta', 'Decatur', 'Sandy Springs', 'Brookhaven', 'Marietta',
@@ -9,6 +10,39 @@ const REGION_CITIES = new Set([
 const JOIN_BASE = Object.freeze({ light: 8, regular: 16, highly_active: 28, connector: 42 });
 const CANCEL_BASE = Object.freeze({ light: 0.8, regular: 1.5, highly_active: 2.7, connector: 4 });
 const SAVE_BASE = Object.freeze({ light: 4.2, regular: 4, highly_active: 3.8, connector: 3.5 });
+const MAYA_JOINED_OPPORTUNITY_IDS = Object.freeze([
+  'd64a44c5-d49a-5077-bfd8-0be2a1843f4c', '77b24520-1ddb-5653-9c1b-375469aac380',
+  '3b26d93e-be03-52ad-a3cd-bec1b57075de', '1cedb2f2-274b-599f-9b5d-5c4d089d9a15',
+  'ceb4699d-c962-5b12-b095-4eff5069ea05', 'a806d357-f513-53e7-b484-62c5fabdc32f',
+]);
+const MAYA_CANCELLED_OPPORTUNITY_IDS = Object.freeze([
+  '4c910c04-a766-5232-9e86-094e9f538527',
+]);
+const DAVID_JOINED_OPPORTUNITY_IDS = Object.freeze([
+  '6665b35f-214d-52dd-b2e2-344e85a4f520', '28ab4696-341f-5135-8a1a-dcdea8e23605',
+  '77b24520-1ddb-5653-9c1b-375469aac380', 'ebf3fc6e-e714-505c-a395-aeb4638535fa',
+  '7b513f74-c17e-53f4-8412-d7dc302748ab', '60dda9d1-ceba-50a3-85e4-304521b6a5e0',
+  'f1ed2e4d-7df4-5b1b-b284-f23be74a9562', 'd7410384-6449-5086-bfd9-12806c30cc8b',
+  'e5c09873-4237-529a-8051-6b30fc51c91f', '0d67a5a3-5544-5484-a6ad-10920095bc23',
+  '0edb448e-5c36-5145-adbe-4dd8377cb132', 'be6e79fb-e50d-59c4-905b-173aecd18d1a',
+  '1ba5e635-9968-56c1-a5fa-cc9ca53e528d',
+]);
+const DAVID_CANCELLED_OPPORTUNITY_IDS = Object.freeze([
+  'e45c8b69-f26a-5983-a131-e859b5dc90a5', '06b411a8-f9c7-5444-bd93-fa01f910a466',
+]);
+const ANCHOR_SAVES = Object.freeze({
+  'Maya Ellis': [
+    ['4643d3da-b781-5b18-b06a-d7bc656520da', '2026-01-14T19:12:10.189Z'],
+    ['a1fe22df-3349-5cab-a889-a77c894cb99a', '2025-10-26T15:38:50.389Z'],
+    ['ef93783b-8931-5d3e-850e-3ecc43b0f74c', '2026-08-22T23:54:40.155Z'],
+    ['ba95c10a-fc5e-5796-b482-a832cf42d9fd', '2026-08-12T12:42:37.613Z'],
+  ],
+  'David Mercer': [
+    ['2ab08881-367c-5852-a960-644c5efbd23c', '2026-05-22T17:10:21.655Z'],
+    ['c2fba5ec-a2e8-59c5-9e12-4ef2155f751d', '2026-08-18T21:25:51.256Z'],
+    ['c3c178d0-f904-5d1d-b467-7f66800afb0a', '2025-11-19T09:13:23.135Z'],
+  ],
+});
 
 function shuffled(rng, values) {
   const result = [...values];
@@ -60,7 +94,9 @@ function allocateOpportunityCounts(rng, opportunities, total, appeal, options = 
   }
 
   if (options.fullCount) {
-    const candidates = selectable.filter((item) => limits.get(item.id) > 0 && item.capacity <= 20);
+    const candidates = selectable.filter((item) => (
+      item.opportunityType === 'volunteer' && limits.get(item.id) > 0 && item.capacity <= 20
+    ));
     for (const item of candidates.slice(0, options.fullCount)) {
       counts.set(item.id, item.capacity);
       limits.set(item.id, item.capacity);
@@ -69,7 +105,8 @@ function allocateOpportunityCounts(rng, opportunities, total, appeal, options = 
   }
   if (options.nearFullCount) {
     const candidates = selectable.filter((item) => (
-      !reserved.has(item.id) && limits.get(item.id) > 0 && item.capacity <= 30
+      item.opportunityType === 'volunteer'
+      && !reserved.has(item.id) && limits.get(item.id) > 0 && item.capacity <= 30
     ));
     for (const item of candidates.slice(0, options.nearFullCount)) {
       const count = Math.max(1, Math.ceil(item.capacity * 0.84));
@@ -121,9 +158,19 @@ function affinity(user, opportunity, participants, signals, causeById, appeal) {
     && signals.userFollows.has(`${user.id}|${opportunity.hostUserId}`)) score *= 3.2;
 
   if (opportunity.isOnline) score *= 1.35;
-  else if (user.city === opportunity.city) score *= 4;
-  else if (region(user) === opportunity.geography) score *= 1.8;
-  else score *= 0.12;
+  else if (user.anchor) {
+    if (user.city === opportunity.city) score *= 4;
+    else if (region(user) === opportunity.geography) score *= 1.8;
+    else score *= 0.12;
+  } else {
+    const miles = userOpportunityMiles(user, opportunity);
+    if (miles <= 5) score *= 5;
+    else if (miles <= 15) score *= 3.2;
+    else if (miles <= 30) score *= 1.8;
+    else if (miles <= 60) score *= 0.7;
+    else if (miles <= 100) score *= 0.22;
+    else score *= 0.025;
+  }
 
   let followedParticipants = 0;
   let followerParticipants = 0;
@@ -198,6 +245,36 @@ function generateParticipation(rng, world) {
     }
   }
 
+  function preserveAnchorTargets(targetMap, requiredIds) {
+    const required = new Map();
+    for (const id of requiredIds) required.set(id, (required.get(id) || 0) + 1);
+    for (const [id, minimum] of required) {
+      const current = targetMap.get(id);
+      let needed = Math.max(0, minimum - current);
+      if (!needed) continue;
+      const bucket = opportunityById.get(id).timeBucket;
+      const donors = world.opportunities
+        .filter((item) => item.timeBucket === bucket && !required.has(item.id))
+        .sort((first, second) => targetMap.get(second.id) - targetMap.get(first.id)
+          || first.id.localeCompare(second.id));
+      for (const donor of donors) {
+        while (needed > 0 && targetMap.get(donor.id) > 0) {
+          targetMap.set(donor.id, targetMap.get(donor.id) - 1);
+          targetMap.set(id, targetMap.get(id) + 1);
+          needed -= 1;
+        }
+        if (!needed) break;
+      }
+      if (needed) throw new Error(`Unable to reserve anchor participation target for ${id}`);
+    }
+  }
+  preserveAnchorTargets(joinedTargets, [
+    ...MAYA_JOINED_OPPORTUNITY_IDS, ...DAVID_JOINED_OPPORTUNITY_IDS,
+  ]);
+  preserveAnchorTargets(cancelledTargets, [
+    ...MAYA_CANCELLED_OPPORTUNITY_IDS, ...DAVID_CANCELLED_OPPORTUNITY_IDS,
+  ]);
+
   const joinedQuota = allocateExactQuotas(rng, world.users, CONFIG.counts.registrations - 750, JOIN_BASE,
     new Map([[maya.id, 7], [david.id, 13]]));
   const cancelledQuota = allocateExactQuotas(rng, world.users, 750, CANCEL_BASE,
@@ -243,22 +320,12 @@ function generateParticipation(rng, world) {
     return true;
   }
 
-  function bestOpportunities(user, bucket, status, count, excluded = new Set()) {
-    const targetMap = status === 'joined' ? joinedTargets : cancelledTargets;
-    const assignedMap = status === 'joined' ? assignedJoined : assignedCancelled;
-    for (let index = 0; index < count; index += 1) {
-      const candidates = world.opportunities.filter((item) => (
-        item.timeBucket === bucket && !excluded.has(item.id)
-        && assignedMap.get(item.id) < targetMap.get(item.id) && canAssign(user, item, status)
-      ));
-      if (!candidates.length) throw new Error(`Unable to build anchor participation for ${user.displayName}`);
-      candidates.sort((first, second) => (
-        affinity(user, second, participantsByOpportunity.get(second.id), signals, causeById, appeal)
-          - affinity(user, first, participantsByOpportunity.get(first.id), signals, causeById, appeal)
-        || first.id.localeCompare(second.id)
-      ));
-      assign(user, candidates[0], status);
-      excluded.add(candidates[0].id);
+  function assignRequired(user, opportunityIds, status) {
+    for (const opportunityId of opportunityIds) {
+      const item = opportunityById.get(opportunityId);
+      if (!item || !assign(user, item, status)) {
+        throw new Error(`Unable to preserve ${user.displayName} participation at ${opportunityId}`);
+      }
     }
   }
 
@@ -274,14 +341,10 @@ function generateParticipation(rng, world) {
       return storyScore(second) - storyScore(first) || first.id.localeCompare(second.id);
     });
   for (const user of flagshipCandidates.slice(0, 4)) assign(user, flagship, 'joined');
-  bestOpportunities(maya, 'recent_past', 'joined', 5);
-  bestOpportunities(maya, 'upcoming', 'joined', 1, new Set([flagship.id]));
-  bestOpportunities(maya, 'recent_past', 'cancelled', 1);
-  bestOpportunities(david, 'recent_past', 'joined', 10);
-  bestOpportunities(david, 'upcoming', 'joined', 2, new Set([davidHosted.id]));
-  bestOpportunities(david, 'farther_future', 'joined', 1);
-  bestOpportunities(david, 'recent_past', 'cancelled', 1);
-  bestOpportunities(david, 'upcoming', 'cancelled', 1, new Set([davidHosted.id]));
+  assignRequired(maya, MAYA_JOINED_OPPORTUNITY_IDS, 'joined');
+  assignRequired(maya, MAYA_CANCELLED_OPPORTUNITY_IDS, 'cancelled');
+  assignRequired(david, DAVID_JOINED_OPPORTUNITY_IDS, 'joined');
+  assignRequired(david, DAVID_CANCELLED_OPPORTUNITY_IDS, 'cancelled');
 
   function fill(status) {
     const targetMap = status === 'joined' ? joinedTargets : cancelledTargets;
@@ -335,15 +398,15 @@ function generateParticipation(rng, world) {
         item,
         weight: affinity(user, item, participantsByOpportunity.get(item.id), signals, causeById, appeal),
       }));
-      const selected = user.anchor
-        ? weighted.sort((first, second) => second.weight - first.weight
-          || first.item.id.localeCompare(second.item.id))[0].item
+      const authored = ANCHOR_SAVES[user.displayName]?.[index];
+      const selected = authored
+        ? opportunityById.get(authored[0])
         : weightedPick(rng, weighted).item;
       selectedIds.add(selected.id);
       savedOpportunities.push({
         userId: user.id,
         opportunityId: selected.id,
-        savedAt: savedDate(rng, user, selected),
+        savedAt: authored ? (savedDate(rng, user, selected), authored[1]) : savedDate(rng, user, selected),
       });
     }
   }
@@ -351,4 +414,4 @@ function generateParticipation(rng, world) {
   return { registrations, savedOpportunities };
 }
 
-module.exports = { generateParticipation, buildSignals, region };
+module.exports = { generateParticipation, buildSignals, region, ANCHOR_SAVES };

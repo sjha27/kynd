@@ -18,6 +18,12 @@ const REACTION_TIER_WEIGHT = Object.freeze({
 const COMMENT_TIER_WEIGHT = Object.freeze({
   light: 0.7, regular: 1.05, highly_active: 1.55, connector: 1.65,
 });
+// Reserve room for later authored rows so Maya and David retain the approved
+// total outgoing engagement while other actors can respond to the corrected world.
+const ANCHOR_SELECTION_CAPS = Object.freeze({
+  reactions: Object.freeze({ 'Maya Ellis': 17, 'David Mercer': 33 }),
+  comments: Object.freeze({ 'Maya Ellis': 7, 'David Mercer': 9 }),
+});
 
 function shuffled(rng, values) {
   const result = [...values];
@@ -261,16 +267,17 @@ function relationshipDependencies(user, details, maps) {
 function anchorTargets(world, maps) {
   const maya = world.users.find((user) => user.displayName === 'Maya Ellis');
   const david = world.users.find((user) => user.displayName === 'David Mercer');
+  const marcus = world.users.find((user) => user.displayName === 'Marcus Ellis');
   const anchors = {
-    maya, david,
+    maya, david, marcus,
     mayaActivity: world.activities.find((item) => (
       item.userId === maya.id && item.manualTitle === 'Westside Community Garden Morning'
     )),
     davidActivity: world.activities.find((item) => {
       if (item.userId !== david.id || !item.registrationId) return false;
       const registration = maps.registrationById.get(item.registrationId);
-      return maps.opportunityById.get(registration.opportunityId).title
-        === 'Veterans Care Package Assembly';
+      return registration.opportunityId
+        === deterministicUuid('opportunity', 'generated-0580');
     }),
     flagshipOpportunity: world.opportunities.find((item) => item.flagship),
     mayaFundraiser: world.fundraisers.find(
@@ -383,7 +390,10 @@ function requiredReactionActors(anchors) {
   return new Map([
     [anchors.mayaActivity.id, [{ user: anchors.david, reactionType: 'celebrate' }]],
     [anchors.davidActivity.id, [{ user: anchors.maya, reactionType: 'celebrate' }]],
-    [anchors.flagshipOpportunity.id, [{ user: anchors.maya, reactionType: 'support' }]],
+    [anchors.flagshipOpportunity.id, [
+      { user: anchors.maya, reactionType: 'support' },
+      { user: anchors.marcus, reactionType: 'support' },
+    ]],
     [anchors.mayaFundraiser.id, [{ user: anchors.david, reactionType: 'celebrate' }]],
     [anchors.davidFundraiser.id, [{ user: anchors.maya, reactionType: 'celebrate' }]],
   ]);
@@ -392,6 +402,8 @@ function requiredReactionActors(anchors) {
 function selectActors(
   rng, world, maps, details, count, inactiveIds, usage, required = [], reactionPairs = null
 ) {
+  const kind = reactionPairs ? 'comments' : 'reactions';
+  const anchorCaps = ANCHOR_SELECTION_CAPS[kind];
   const selected = [...required.map((item) => item.user || item)];
   const selectedIds = new Set(selected.map((user) => user.id));
   const pairFor = (user) => `${user.id}|${details.type}|${details.target.id}`;
@@ -399,6 +411,7 @@ function selectActors(
   while (selected.length < count) {
     const allCandidates = world.users.filter((user) => (
       !inactiveIds.has(user.id) && !selectedIds.has(user.id) && userCanEngage(user, details)
+      && (!anchorCaps[user.displayName] || usage.get(user.id) < anchorCaps[user.displayName])
     ));
     const currentOverlap = selected.filter((user) => reactionPairs?.has(pairFor(user))).length;
     const reactingCandidates = allCandidates.filter((user) => reactionPairs?.has(pairFor(user)));
@@ -409,6 +422,7 @@ function selectActors(
       user,
       weight: actorAffinity(user, details, maps)
         * (reactionPairs ? COMMENT_TIER_WEIGHT[user.tier] : REACTION_TIER_WEIGHT[user.tier])
+        * (anchorCaps[user.displayName] ? 2.5 : 1)
         * (reactionPairs?.has(pairFor(user)) ? 2 : 1)
         / Math.pow(1 + usage.get(user.id), 1.22),
     }))).user;

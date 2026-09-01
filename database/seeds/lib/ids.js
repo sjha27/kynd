@@ -34,6 +34,27 @@ function deterministicUuid(namespace, key) {
   ].join('-');
 }
 
+function stableUnitInterval(namespace, key) {
+  const digest = crypto.createHash('sha256')
+    .update(`https://kynd.demo/${namespace}/${key}`, 'utf8')
+    .digest();
+  return digest.readUInt32BE(0) / 0x100000000;
+}
+
+function stableIndex(namespace, key, length) {
+  if (!Number.isInteger(length) || length <= 0) {
+    throw new Error('Stable selection requires a non-empty collection.');
+  }
+  return Math.floor(stableUnitInterval(namespace, key) * length);
+}
+
+function stablePick(namespace, key, values) {
+  return values[stableIndex(namespace, key, values.length)];
+}
+
 module.exports = {
   deterministicUuid,
+  stableUnitInterval,
+  stableIndex,
+  stablePick,
 };
