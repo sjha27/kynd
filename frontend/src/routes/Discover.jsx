@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import { SearchX } from 'lucide-react';
-import { fetchOpportunities } from '../api/client';
+import { fetchOpportunities, fetchFundraisers } from '../api/client';
 import SearchBar from '../components/discover/SearchBar';
 import FilterBar from '../components/discover/FilterBar';
 import FilterSheet from '../components/discover/FilterSheet';
 import OpportunityCard from '../components/opportunity/OpportunityCard';
 import OpportunityCardSkeleton from '../components/opportunity/OpportunityCardSkeleton';
+import FundraiserCard from '../components/fundraiser/FundraiserCard';
 import ErrorState from '../components/ui/ErrorState';
 import EmptyState from '../components/ui/EmptyState';
 import Button from '../components/ui/Button';
@@ -175,6 +176,53 @@ function Section({ section, reduced }) {
           ))}
         </CardGrid>
       )}
+    </section>
+  );
+}
+
+/*
+ * Fundraisers on Discover.
+ *
+ * Deliberately its own section against its own endpoint, rather than being
+ * merged into the opportunity search/filter contract. A fundraiser is a
+ * different object with different fields, and unioning the two into one
+ * paginated, filtered, sorted result set would mean redesigning that
+ * contract for every surface that consumes it. Browsing surfaces both;
+ * searching and filtering still operate purely on opportunities.
+ */
+function FundraiserSection({ reduced }) {
+  const [state, setState] = useState({ status: 'loading', items: [] });
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchFundraisers({ limit: 3 }, { signal: controller.signal })
+      .then((body) => setState({ status: 'ready', items: body.fundraisers }))
+      .catch((err) => {
+        if (err.name === 'AbortError') return;
+        setState({ status: 'error', items: [] });
+      });
+    return () => controller.abort();
+  }, []);
+
+  if (state.status !== 'ready' || state.items.length === 0) return null;
+
+  return (
+    <section className="mb-10">
+      <motion.div className="mb-3.5" {...entranceInView(reduced, { y: 8 })}>
+        <h2 className="text-[19px] font-bold tracking-[-0.015em] text-ink">Fundraisers to support</h2>
+        <p className="mt-0.5 text-[14px] text-ink-muted">Closing soonest, around Atlanta</p>
+      </motion.div>
+
+      <CardGrid>
+        {state.items.map((fundraiser, index) => (
+          <motion.div
+            key={fundraiser.id}
+            {...entranceInView(reduced, { y: 10, delay: staggerDelay(index, reduced) })}
+          >
+            <FundraiserCard fundraiser={fundraiser} />
+          </motion.div>
+        ))}
+      </CardGrid>
     </section>
   );
 }
@@ -396,6 +444,7 @@ function Discover() {
             {SECTIONS.map((section) => (
               <Section key={section.key} section={section} reduced={reduced} />
             ))}
+            <FundraiserSection reduced={reduced} />
           </>
         ) : (
           <Results

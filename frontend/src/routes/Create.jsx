@@ -6,9 +6,9 @@ import PageContainer from '../components/layout/PageContainer';
  * Kynd's three creation paths — this is the real product surface behind the
  * + action, not a description of one. Deliberately not a post composer.
  *
- * Create an opportunity and Log activity are both live. Start a fundraiser
- * is still out of scope, so its row stays non-interactive and says so,
- * rather than being a button that goes nowhere.
+ * All three are live. The non-link branch below is kept because the row
+ * shape should not have to be rebuilt when a future creation path arrives
+ * before its workflow does.
  */
 const OPTIONS = [
   {
@@ -23,7 +23,7 @@ const OPTIONS = [
     color: 'var(--color-cause-amber)',
     title: 'Start a fundraiser',
     body: 'Raise support for a cause or an organization you care about.',
-    to: null,
+    to: '/create/fundraiser',
   },
   {
     icon: NotebookPen,
@@ -93,8 +93,8 @@ function Create() {
       </div>
 
       <p className="mt-6 text-[15px] text-ink-muted">
-        Fundraisers open in a later build. Kynd has no generic post composer &mdash; everything you
-        create connects to real participation.
+        Kynd has no generic post composer &mdash; everything you create connects to real
+        participation.
       </p>
     </PageContainer>
   );

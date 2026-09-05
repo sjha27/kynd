@@ -130,6 +130,22 @@ export function opportunityImage(opportunity) {
 }
 
 /*
+ * Fundraisers resolve through the same cause pools and the same stable id
+ * hash as opportunities: the photography honestly depicts work in that cause
+ * area, and a fundraiser always shows the same image on its card and its
+ * detail page. Falls through to <Photo>'s neutral panel for a cause with no
+ * pool, rather than borrowing an unrelated photograph.
+ */
+export function fundraiserImage(fundraiser) {
+  if (!fundraiser) return null;
+
+  const pool = CAUSE_POOLS[fundraiser.cause?.name];
+  if (!pool || pool.length === 0) return null;
+
+  return assetPath(pool[hashId(fundraiser.id) % pool.length]);
+}
+
+/*
  * Organization logos and user avatars are deliberately NOT resolved to
  * files. The seed data references 25 .svg logos and 50 .webp avatars that
  * do not exist, and the ten supplied portrait photos carry no information

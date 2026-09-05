@@ -13,6 +13,7 @@ const demoSessionsRouter = require('./routes/demo_sessions');
 const activityRouter = require('./routes/activity');
 const activitiesRouter = require('./routes/activities');
 const homeRouter = require('./routes/home');
+const fundraisersRouter = require('./routes/fundraisers');
 const { notFoundHandler, errorHandler } = require('./middleware/errors');
 const { SESSION_HEADER } = require('./middleware/session');
 
@@ -62,6 +63,7 @@ function createApp() {
   app.use('/api/v1/activity', activityRouter);
   app.use('/api/v1/activities', activitiesRouter);
   app.use('/api/v1/home', homeRouter);
+  app.use('/api/v1/fundraisers', fundraisersRouter);
   app.use('/api/v1/users', usersRouter);
   app.use('/api/v1/organizations', organizationsRouter);
 

@@ -107,15 +107,27 @@ async function countProfileOrganizations(userId) {
   return rows[0].count;
 }
 
-// Amount Raised = SUM(fundraiser_supports.amount_cents) for fundraisers
-// where creator_user_id is the profile user.
-async function getAmountRaisedCents(userId) {
+/*
+ * Amount Raised = SUM(fundraiser_supports.amount_cents) for fundraisers
+ * where creator_user_id is the profile user.
+ *
+ * Scoped by the viewer's session on the SUPPORTER side, the same rule
+ * visibleRaisedCentsSql applies to a fundraiser's own progress. This matters
+ * now that support is writable: without it, one visitor supporting a seeded
+ * person's fundraiser would raise that person's Amount Raised for every
+ * other visitor too — the exact cross-session leak the frozen visibility
+ * rule forbids. Unlike Hours or Activities, whose rows can only ever be
+ * created by the profile user themselves, this metric aggregates over other
+ * people's rows and therefore needs the predicate.
+ */
+async function getAmountRaisedCents(userId, sessionId = null) {
   const { rows } = await query(
     `SELECT COALESCE(SUM(fs.amount_cents), 0)::bigint AS amount_cents
      FROM fundraiser_supports fs
      JOIN fundraisers f ON f.id = fs.fundraiser_id
-     WHERE f.creator_user_id = $1`,
-    [userId]
+     JOIN users su ON su.id = fs.user_id
+     WHERE f.creator_user_id = $1 AND ${visibleUserPredicate('su', '$2')}`,
+    [userId, sessionId]
   );
   return rows[0].amount_cents;
 }

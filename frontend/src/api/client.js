@@ -131,6 +131,26 @@ function fetchHome(options) {
   return apiGet('/api/v1/home', options);
 }
 
+function fetchFundraisers(params, options) {
+  return apiGet(`/api/v1/fundraisers${buildQuery(params)}`, options);
+}
+
+function fetchFundraiser(id, options) {
+  return apiGet(`/api/v1/fundraisers/${id}`, options);
+}
+
+// Simulated support: the body carries only the amount the visitor chose.
+// There are no payment fields, because no payment is processed, and the
+// supporter comes from the session.
+function supportFundraiser(id, { amountCents }, options) {
+  return apiPost(`/api/v1/fundraisers/${id}/support`, { ...options, body: { amountCents } });
+}
+
+// Creation never sends a creator: the backend takes it from the session.
+function createFundraiser(input, options) {
+  return apiPost('/api/v1/fundraisers', { ...options, body: input });
+}
+
 function fetchUserProfile(id, options) {
   return apiGet(`/api/v1/users/${id}/profile`, options);
 }
@@ -177,6 +197,10 @@ export {
   completeOpportunity,
   fetchActivity,
   logActivity,
+  fetchFundraisers,
+  fetchFundraiser,
+  supportFundraiser,
+  createFundraiser,
   fetchHome,
   createDemoSession,
   fetchCurrentDemoSession,

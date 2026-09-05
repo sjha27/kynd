@@ -42,6 +42,46 @@ function visibleOpportunityPredicate(opportunityAlias, hostUserAlias, sessionPar
 }
 
 /*
+ * Whether a fundraiser is addressable by this viewer. Same shape as
+ * visibleOpportunityPredicate: seeded fundraisers are created by a seeded
+ * user or an organization, and one created by ANOTHER visitor's temporary
+ * user must be invisible.
+ *
+ * Expects the fundraiser's creator user to be LEFT JOINed as
+ * `creatorUserAlias`.
+ */
+function visibleFundraiserPredicate(fundraiserAlias, creatorUserAlias, sessionParam) {
+  return `(${fundraiserAlias}.creator_user_id IS NULL OR ${visibleUserPredicate(creatorUserAlias, sessionParam)})`;
+}
+
+/*
+ * Fundraiser progress is DERIVED from support relationships — never a stored
+ * total — and derived through the same visibility rule as everything else:
+ * seeded supporters plus the current visitor's own support. Two visitors who
+ * each give $25 to the same fundraiser both see the seeded total plus their
+ * own $25, never each other's.
+ */
+function visibleRaisedCentsSql(fundraiserRef, sessionParam) {
+  return `(
+    SELECT COALESCE(SUM(vs.amount_cents), 0)::bigint
+    FROM fundraiser_supports vs
+    JOIN users vu ON vu.id = vs.user_id
+    WHERE vs.fundraiser_id = ${fundraiserRef}
+      AND ${visibleUserPredicate('vu', sessionParam)}
+  )`;
+}
+
+function visibleSupporterCountSql(fundraiserRef, sessionParam) {
+  return `(
+    SELECT COUNT(*)::int
+    FROM fundraiser_supports vs
+    JOIN users vu ON vu.id = vs.user_id
+    WHERE vs.fundraiser_id = ${fundraiserRef}
+      AND ${visibleUserPredicate('vu', sessionParam)}
+  )`;
+}
+
+/*
  * Count of participants an opportunity should appear to have for this viewer.
  * Joins through users so unrelated temporary visitors are excluded — counting
  * registrations alone would leak every other session's joins.
@@ -90,6 +130,9 @@ function visibleOrganizationFollowerCountSql(organizationRef, sessionParam) {
 module.exports = {
   visibleUserPredicate,
   visibleOpportunityPredicate,
+  visibleFundraiserPredicate,
+  visibleRaisedCentsSql,
+  visibleSupporterCountSql,
   visibleJoinedCountSql,
   visibleFollowerCountSql,
   visibleOrganizationFollowerCountSql,

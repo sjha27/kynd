@@ -30,7 +30,7 @@ async function getUserProfile(id, { sessionId = null, viewerUserId = null } = {}
     usersQueries.countFollowing(id, sessionId),
     usersQueries.getActivityMetrics(id),
     usersQueries.countProfileOrganizations(id),
-    usersQueries.getAmountRaisedCents(id),
+    usersQueries.getAmountRaisedCents(id, sessionId),
     viewerUserId ? followsQueries.isFollowingUser(viewerUserId, id) : Promise.resolve(false),
   ]);
 

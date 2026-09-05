@@ -88,6 +88,37 @@ export function todayInAtlanta() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
 }
 
+/*
+ * Money is integer cents everywhere in the API and the database; it only
+ * becomes dollars at the moment of display. Whole dollars by default,
+ * because a fundraiser's progress reads better as "$4,250 of $10,000" than
+ * with cents that are always .00 in a simulated demo.
+ */
+export function formatMoney(cents, { showCents = false } = {}) {
+  const amount = (Number(cents) || 0) / 100;
+  return amount.toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: showCents ? 2 : 0,
+    maximumFractionDigits: showCents ? 2 : 0,
+  });
+}
+
+/*
+ * How much longer a fundraiser has, from a calendar end date. Date-only
+ * throughout: both sides are reduced to Atlanta calendar days before
+ * subtracting, so the answer never shifts by one with the viewer's clock.
+ */
+export function daysRemaining(endDate) {
+  if (!endDate) return null;
+  const [y, m, d] = String(endDate).slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return null;
+  const end = Date.UTC(y, m - 1, d);
+  const [ty, tm, td] = todayInAtlanta().split('-').map(Number);
+  const today = Date.UTC(ty, tm - 1, td);
+  return Math.round((end - today) / 86400000);
+}
+
 export function formatLocation(location) {
   if (!location) return null;
   if (location.isOnline) return 'Online';
