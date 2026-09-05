@@ -78,6 +78,16 @@ export function formatCalendarDate(value, options = { month: 'short', day: 'nume
   });
 }
 
+/*
+ * Today's Atlanta calendar date as YYYY-MM-DD, for bounding date inputs.
+ * en-CA formats as YYYY-MM-DD, which is exactly what <input type="date">
+ * takes for min/max and what the API expects. The backend re-checks every
+ * date against the real database clock; this only keeps the control honest.
+ */
+export function todayInAtlanta() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
+}
+
 export function formatLocation(location) {
   if (!location) return null;
   if (location.isOnline) return 'Online';

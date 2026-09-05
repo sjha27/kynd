@@ -96,6 +96,12 @@ function fetchOpportunity(id, options) {
   return apiGet(`/api/v1/opportunities/${id}`, options);
 }
 
+// Creation never sends a host: the backend takes it from the session, so a
+// published opportunity is always hosted by the visitor who created it.
+function createOpportunity(input, options) {
+  return apiPost('/api/v1/opportunities', { ...options, body: input });
+}
+
 // Join takes no body: the backend derives the acting user from the session.
 function joinOpportunity(id, options) {
   return apiPost(`/api/v1/opportunities/${id}/join`, options);
@@ -166,6 +172,7 @@ export {
   buildQuery,
   fetchOpportunities,
   fetchOpportunity,
+  createOpportunity,
   joinOpportunity,
   completeOpportunity,
   fetchActivity,

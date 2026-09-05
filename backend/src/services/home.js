@@ -125,7 +125,12 @@ async function buildHomeFeed({ sessionId, userId }) {
       homeQueries.findFollowedPersonUpcoming(followedUserIds, followedOrgIds, causeIds),
       homeQueries.findFollowedPersonActivities(followedUserIds),
       homeQueries.findFollowedOrganizationOpportunities(followedOrgIds),
-      homeQueries.findCauseDiscoveryOpportunities(causeIds, followedUserIds, followedOrgIds),
+      homeQueries.findCauseDiscoveryOpportunities(
+        causeIds,
+        followedUserIds,
+        followedOrgIds,
+        sessionId
+      ),
     ]);
 
   const pools = {

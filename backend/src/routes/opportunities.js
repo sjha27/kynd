@@ -50,6 +50,35 @@ router.get('/:id', optionalDemoSession(), async (req, res, next) => {
 });
 
 /*
+ * Publishing an opportunity. Requires a real session, and the host is taken
+ * from it — host_user_id is never read from the body, so a caller can never
+ * publish as someone else or as an organization.
+ */
+router.post('/', requireDemoSession(), async (req, res, next) => {
+  try {
+    const opportunity = await opportunitiesService.createOpportunity({
+      hostUserId: req.demo.user.id,
+      sessionId: req.demo.sessionId,
+      title: req.body?.title,
+      type: req.body?.type,
+      causeName: req.body?.causeName,
+      description: req.body?.description,
+      date: req.body?.date,
+      startTime: req.body?.startTime,
+      endTime: req.body?.endTime,
+      isOnline: req.body?.isOnline,
+      locationName: req.body?.locationName,
+      city: req.body?.city,
+      state: req.body?.state,
+      capacity: req.body?.capacity,
+    });
+    res.status(201).json({ opportunity });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/*
  * Join requires a real session. The acting user is taken from the resolved
  * session — the body is not read at all, so a caller cannot join as someone
  * else or nominate a participant.

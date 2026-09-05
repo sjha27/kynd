@@ -1,6 +1,7 @@
 'use strict';
 
 const { query } = require('../pool');
+const { visibleOpportunityPredicate } = require('../visibility');
 
 /*
  * Home's candidate-discovery queries. Each returns just enough to rank and
@@ -124,7 +125,12 @@ async function findFollowedOrganizationOpportunities(followedOrgIds) {
  * Frank's existing follow graph" doesn't need its own ranking pass — a
  * plain boolean DESC does it (Postgres sorts true before false descending).
  */
-async function findCauseDiscoveryOpportunities(causeIds, followedUserIds, followedOrgIds) {
+async function findCauseDiscoveryOpportunities(
+  causeIds,
+  followedUserIds,
+  followedOrgIds,
+  sessionId = null
+) {
   if (causeIds.length === 0) return [];
   const { rows } = await query(
     `SELECT
@@ -139,12 +145,17 @@ async function findCauseDiscoveryOpportunities(causeIds, followedUserIds, follow
        ) AS outside_graph
      FROM opportunities o
      JOIN causes c ON c.id = o.cause_id
+     -- Joined purely to scope host visibility. This is the one Home query
+     -- that reaches outside the viewer's follow graph, so it is the one that
+     -- could otherwise surface an opportunity another visitor created.
+     LEFT JOIN users hu ON hu.id = o.host_user_id
      WHERE o.cause_id = ANY($1::uuid[])
        AND o.status = 'published'
        AND o.starts_at > now()
+       AND ${visibleOpportunityPredicate('o', 'hu', '$4')}
      ORDER BY outside_graph DESC, o.starts_at ASC, o.id ASC
      LIMIT 100`,
-    [causeIds, followedOrgIds, followedUserIds]
+    [causeIds, followedOrgIds, followedUserIds, sessionId]
   );
   return rows;
 }

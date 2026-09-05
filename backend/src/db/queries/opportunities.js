@@ -7,7 +7,11 @@ const {
   LOCAL_TIMEZONE,
   COMMITMENT_BANDS,
 } = require('../../lib/discovery');
-const { visibleUserPredicate, visibleJoinedCountSql } = require('../visibility');
+const {
+  visibleUserPredicate,
+  visibleOpportunityPredicate,
+  visibleJoinedCountSql,
+} = require('../visibility');
 
 /*
  * All opportunity reads are session-scoped.
@@ -62,6 +66,14 @@ const OPPORTUNITY_SELECT = `
 `;
 
 /*
+ * Applied by every caller of OPPORTUNITY_SELECT. An opportunity created by
+ * another visitor's temporary user is not addressable here — indistinguishable
+ * from an id that never existed, the same way another session's temporary
+ * user is on the profile route.
+ */
+const VISIBLE_OPPORTUNITY = visibleOpportunityPredicate('o', 'hu', SESSION_PARAM);
+
+/*
  * Builds the WHERE fragment for Discover browsing.
  *
  * Every visitor-supplied value becomes a bound parameter — no filter value
@@ -69,7 +81,7 @@ const OPPORTUNITY_SELECT = `
  * the clause list so callers can keep appending (LIMIT/OFFSET) afterwards.
  */
 function buildFilters(filters, params) {
-  const clauses = [`o.status = 'published'`];
+  const clauses = [`o.status = 'published'`, VISIBLE_OPPORTUNITY];
 
   const bind = (value) => {
     params.push(value);
@@ -196,7 +208,10 @@ async function searchOpportunities({ limit, offset, sessionId = null, ...filters
 }
 
 async function findOpportunityById(id, sessionId = null) {
-  const { rows } = await query(`${OPPORTUNITY_SELECT} WHERE o.id = $2`, [sessionId, id]);
+  const { rows } = await query(
+    `${OPPORTUNITY_SELECT} WHERE o.id = $2 AND ${VISIBLE_OPPORTUNITY}`,
+    [sessionId, id]
+  );
   return rows[0] || null;
 }
 
@@ -297,9 +312,15 @@ async function joinOpportunity({ opportunityId, userId, sessionId }) {
      * on the same row and cannot consume two spots. The uniqueness constraint
      * is the serialization point, not a lock.
      */
+    // Scoped by the same visibility rule the reads use: an opportunity
+    // hosted by another visitor's temporary user is not joinable even if its
+    // id were somehow guessed, rather than relying on it being undiscoverable.
     const opportunity = await client.query(
-      `SELECT id, capacity, status, starts_at FROM opportunities WHERE id = $1`,
-      [opportunityId]
+      `SELECT o.id, o.capacity, o.status, o.starts_at
+       FROM opportunities o
+       LEFT JOIN users hu ON hu.id = o.host_user_id
+       WHERE o.id = $1 AND ${visibleOpportunityPredicate('o', 'hu', '$2')}`,
+      [opportunityId, sessionId]
     );
     if (opportunity.rowCount === 0) {
       await client.query('ROLLBACK');
@@ -384,6 +405,7 @@ async function findUpcomingForSession(sessionId, limit = 50) {
      JOIN registrations r ON r.opportunity_id = o.id AND r.status = 'joined'
      JOIN users ru ON ru.id = r.user_id AND ru.demo_session_id = ${SESSION_PARAM}
      WHERE o.status = 'published' AND o.starts_at > now()
+       AND ${VISIBLE_OPPORTUNITY}
        -- Once a registration has a completed activity, it moves to
        -- Completed and must stop appearing here — this is the only rule
        -- that matters for the demo-only early flagship completion, since
@@ -410,6 +432,7 @@ async function findAwaitingConfirmationForSession(sessionId, limit = 50) {
      JOIN registrations r ON r.opportunity_id = o.id AND r.status = 'joined'
      JOIN users ru ON ru.id = r.user_id AND ru.demo_session_id = ${SESSION_PARAM}
      WHERE o.ends_at <= now()
+       AND ${VISIBLE_OPPORTUNITY}
        AND NOT EXISTS (SELECT 1 FROM activities a WHERE a.registration_id = r.id)
      ORDER BY o.ends_at DESC, o.id ASC
      LIMIT $2`,
@@ -418,9 +441,97 @@ async function findAwaitingConfirmationForSession(sessionId, limit = 50) {
   return rows;
 }
 
+/*
+ * Resolves and validates everything a creation needs against the database in
+ * one round trip, before anything is written:
+ *
+ *   cause_id           — the seeded cause, by exact name. NULL is rejected.
+ *   starts_at/ends_at  — the visitor entered an Atlanta wall-clock date and
+ *                        time. Composing them as a local timestamp and
+ *                        applying the zone in SQL converts to a correct
+ *                        instant across DST, which naive JS date maths does
+ *                        not.
+ *   starts_in_past     — checked against now(), the real runtime clock. The
+ *                        synthetic WORLD_REFERENCE_DATE governs the seeded
+ *                        world only and must never reach this path.
+ *
+ * `date`, `startTime` and `endTime` are already format-validated by the
+ * service, so the casts here cannot fail on malformed input.
+ */
+async function resolveOpportunityInputs({ causeName, date, startTime, endTime }) {
+  const { rows } = await query(
+    `SELECT
+       (SELECT c.id FROM causes c WHERE c.name = $1) AS cause_id,
+       s.ts AS starts_at,
+       e.ts AS ends_at,
+       (s.ts <= now()) AS starts_in_past,
+       (e.ts <= s.ts) AS ends_before_start
+     FROM (SELECT ($2 || ' ' || $3)::timestamp AT TIME ZONE $5 AS ts) s,
+          (SELECT ($2 || ' ' || $4)::timestamp AT TIME ZONE $5 AS ts) e`,
+    [causeName, date, startTime, endTime, LOCAL_TIMEZONE]
+  );
+  return rows[0];
+}
+
+/*
+ * An opportunity hosted by a person rather than an organization.
+ *
+ * host_user_id is always the resolved session's temporary user and
+ * host_organization_id is always NULL — the shape the schema's
+ * chk_opportunities_exactly_one_host constraint requires, and the reason
+ * there is no organization-admin creation path here.
+ *
+ * image_url stays NULL: no upload infrastructure exists, and the frontend's
+ * deterministic cause-keyed media resolution already gives every opportunity
+ * a real photograph from its id and cause.
+ */
+async function insertOpportunity({
+  id,
+  hostUserId,
+  title,
+  opportunityType,
+  causeId,
+  description,
+  startsAt,
+  endsAt,
+  isOnline,
+  locationName,
+  city,
+  state,
+  capacity,
+}) {
+  await query(
+    `INSERT INTO opportunities (
+       id, title, opportunity_type, cause_id,
+       host_user_id, host_organization_id,
+       description, starts_at, ends_at,
+       is_online, location_name, city, state,
+       capacity, image_url, status
+     )
+     VALUES ($1, $2, $3, $4, $5, NULL, $6, $7, $8, $9, $10, $11, $12, $13, NULL, 'published')`,
+    [
+      id,
+      title,
+      opportunityType,
+      causeId,
+      hostUserId,
+      description,
+      startsAt,
+      endsAt,
+      isOnline,
+      locationName,
+      city,
+      state,
+      capacity,
+    ]
+  );
+}
+
 module.exports = {
   searchOpportunities,
   findOpportunityById,
+  resolveOpportunityInputs,
+  insertOpportunity,
   joinOpportunity,
   findUpcomingForSession,
   findAwaitingConfirmationForSession,

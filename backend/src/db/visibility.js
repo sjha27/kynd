@@ -23,6 +23,25 @@ function visibleUserPredicate(usersAlias, sessionParam) {
 }
 
 /*
+ * Whether an opportunity itself is addressable by this viewer.
+ *
+ * Every seeded opportunity is hosted either by an organization or by a
+ * seeded user, so this is always true for the seeded world. It starts to
+ * matter the moment temporary visitors can create opportunities: an
+ * opportunity hosted by ANOTHER session's temporary user must be invisible,
+ * or Session A's creation would surface in Session B's Discover, detail
+ * route and Home — exactly the leak the frozen visibility rule forbids.
+ *
+ * Expects the opportunity's host user to be LEFT JOINed as `hostUserAlias`.
+ * The host_user_id IS NULL branch is written out rather than relying on the
+ * unmatched-join columns being NULL, so the organization-hosted case is
+ * explicit instead of accidental.
+ */
+function visibleOpportunityPredicate(opportunityAlias, hostUserAlias, sessionParam) {
+  return `(${opportunityAlias}.host_user_id IS NULL OR ${visibleUserPredicate(hostUserAlias, sessionParam)})`;
+}
+
+/*
  * Count of participants an opportunity should appear to have for this viewer.
  * Joins through users so unrelated temporary visitors are excluded — counting
  * registrations alone would leak every other session's joins.
@@ -70,6 +89,7 @@ function visibleOrganizationFollowerCountSql(organizationRef, sessionParam) {
 
 module.exports = {
   visibleUserPredicate,
+  visibleOpportunityPredicate,
   visibleJoinedCountSql,
   visibleFollowerCountSql,
   visibleOrganizationFollowerCountSql,

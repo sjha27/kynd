@@ -4,6 +4,7 @@ import Home from './routes/Home';
 import Discover from './routes/Discover';
 import Create from './routes/Create';
 import LogActivity from './routes/LogActivity';
+import CreateOpportunity from './routes/CreateOpportunity';
 import Activity from './routes/Activity';
 import Profile from './routes/Profile';
 import OpportunityDetail from './routes/OpportunityDetail';
@@ -21,6 +22,7 @@ function App() {
         <Route path="/users/:id" element={<UserProfile />} />
         <Route path="/organizations/:id" element={<OrganizationDetail />} />
         <Route path="/create" element={<Create />} />
+        <Route path="/create/opportunity" element={<CreateOpportunity />} />
         <Route path="/create/log" element={<LogActivity />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/profile" element={<Profile />} />

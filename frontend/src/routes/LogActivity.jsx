@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 import PageContainer from '../components/layout/PageContainer';
 import Button from '../components/ui/Button';
 import { CAUSES } from '../lib/causes';
+import { todayInAtlanta } from '../lib/format';
 import { logActivity } from '../api/client';
 
 /*
@@ -19,13 +20,6 @@ import { logActivity } from '../api/client';
  * external organization, which is an equally valid answer. The client never
  * sends an organization id — resolving the name is the backend's job.
  */
-
-// Today in Atlanta, as YYYY-MM-DD, so the date input can't offer a future
-// day. The backend re-checks this against the real database clock; this is
-// only here to keep the control honest.
-function todayInAtlanta() {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
-}
 
 const FIELD_CLASSES =
   'mt-1.5 block w-full rounded-control border border-line-strong bg-surface px-3 py-2.5 text-[15px] text-ink';

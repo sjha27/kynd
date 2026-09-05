@@ -340,13 +340,21 @@ describe('Discover browsing API', () => {
     });
   });
 
-  describe('read-only guarantee', () => {
-    it.each(['post', 'put', 'patch', 'delete'])(
+  describe('write-surface guarantee', () => {
+    // Creation deliberately added POST (publishing an opportunity). Editing
+    // and deleting are still out of scope and must stay unreachable.
+    it.each(['put', 'patch', 'delete'])(
       'does not expose a %s route on opportunities',
       async (method) => {
         const res = await request(createApp())[method]('/api/v1/opportunities');
         expect(res.status).toBe(404);
       }
     );
+
+    it('exposes POST, but only to a real demo session', async () => {
+      const res = await request(createApp()).post('/api/v1/opportunities').send({});
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe('demo_session_invalid');
+    });
   });
 });

@@ -1,8 +1,10 @@
 'use strict';
 
+const crypto = require('node:crypto');
+
 const opportunitiesQueries = require('../db/queries/opportunities');
-const { NotFoundError, ConflictError } = require('../errors');
-const { COMMITMENT_BANDS } = require('../lib/discovery');
+const { NotFoundError, ConflictError, ValidationError } = require('../errors');
+const { COMMITMENT_BANDS, OPPORTUNITY_TYPES } = require('../lib/discovery');
 const { DEMO_COMPLETABLE_OPPORTUNITY_IDS } = require('../config/demo_completion');
 
 const CARD_ATTENDEE_PREVIEW = 3;
@@ -192,9 +194,124 @@ async function listAwaitingConfirmationForSession(sessionId) {
   );
 }
 
+// Free-text goes into unbounded TEXT columns, so it gets product-level
+// bounds here. Capacity's ceiling keeps an obvious typo out of a number the
+// marketplace displays; the schema itself only requires it to be positive.
+const MAX_TITLE_LENGTH = 120;
+const MAX_DESCRIPTION_LENGTH = 2000;
+const MAX_LOCATION_LENGTH = 120;
+const MAX_CAPACITY = 500;
+
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+const STATE_PATTERN = /^[A-Z]{2}$/;
+
+function requiredText(value, label, maxLength) {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text) throw new ValidationError(`${label} is required.`);
+  if (text.length > maxLength) {
+    throw new ValidationError(`${label} must be ${maxLength} characters or fewer.`);
+  }
+  return text;
+}
+
+/*
+ * Creating an opportunity, as a product operation.
+ *
+ * The host is ALWAYS the resolved session's temporary user — host_user_id is
+ * never read from the request. This is the same rule Join, Completion and
+ * manual logging use, and it is what makes "Frank is the host" a fact about
+ * the session rather than a claim the browser makes.
+ *
+ * The result is a real published opportunities row, so it reaches Discover,
+ * the detail route and Join through the paths that already exist. Nothing
+ * about the new opportunity is special-cased downstream.
+ */
+async function createOpportunity({ hostUserId, sessionId, ...input }) {
+  const title = requiredText(input.title, 'Title', MAX_TITLE_LENGTH);
+  const description = requiredText(input.description, 'Description', MAX_DESCRIPTION_LENGTH);
+
+  if (!OPPORTUNITY_TYPES.includes(input.type)) {
+    throw new ValidationError('Type must be either a volunteer opportunity or a charity event.');
+  }
+
+  const causeName = requiredText(input.causeName, 'Cause', MAX_TITLE_LENGTH);
+
+  if (typeof input.date !== 'string' || !DATE_PATTERN.test(input.date.trim())) {
+    throw new ValidationError('Date must be a valid date in YYYY-MM-DD format.');
+  }
+  if (typeof input.startTime !== 'string' || !TIME_PATTERN.test(input.startTime.trim())) {
+    throw new ValidationError('Start time must be a valid time in HH:MM format.');
+  }
+  if (typeof input.endTime !== 'string' || !TIME_PATTERN.test(input.endTime.trim())) {
+    throw new ValidationError('End time must be a valid time in HH:MM format.');
+  }
+
+  const capacity = Number(input.capacity);
+  if (!Number.isInteger(capacity) || capacity < 1 || capacity > MAX_CAPACITY) {
+    throw new ValidationError(`Capacity must be a whole number between 1 and ${MAX_CAPACITY}.`);
+  }
+
+  // An online opportunity genuinely has no physical location, so the location
+  // fields stay NULL rather than being filled with a placeholder.
+  const isOnline = input.isOnline === true;
+  let locationName = null;
+  let city = null;
+  let state = null;
+
+  if (!isOnline) {
+    locationName = requiredText(input.locationName, 'Location name', MAX_LOCATION_LENGTH);
+    city = requiredText(input.city, 'City', MAX_LOCATION_LENGTH);
+    state = requiredText(input.state, 'State', 2).toUpperCase();
+    if (!STATE_PATTERN.test(state)) {
+      throw new ValidationError('State must be a two-letter state code.');
+    }
+  }
+
+  const resolved = await opportunitiesQueries.resolveOpportunityInputs({
+    causeName,
+    date: input.date.trim(),
+    startTime: input.startTime.trim(),
+    endTime: input.endTime.trim(),
+  });
+
+  if (!resolved.cause_id) {
+    throw new ValidationError('Cause must be one of the causes on Kynd.');
+  }
+  if (resolved.ends_before_start) {
+    throw new ValidationError('End time must be after the start time.');
+  }
+  if (resolved.starts_in_past) {
+    throw new ValidationError('An opportunity must start in the future.');
+  }
+
+  const id = crypto.randomUUID();
+  await opportunitiesQueries.insertOpportunity({
+    id,
+    hostUserId,
+    title,
+    opportunityType: input.type,
+    causeId: resolved.cause_id,
+    description,
+    startsAt: resolved.starts_at,
+    endsAt: resolved.ends_at,
+    isOnline,
+    locationName,
+    city,
+    state,
+    capacity,
+  });
+
+  // Read it back through the ordinary session-aware detail path, so the
+  // response is the same object Discover and the detail route serve — proof
+  // the row is genuinely addressable, not a shape assembled from the input.
+  return getOpportunityDetail(id, sessionId);
+}
+
 module.exports = {
   listOpportunities,
   getOpportunityDetail,
+  createOpportunity,
   joinOpportunity,
   listUpcomingForSession,
   listAwaitingConfirmationForSession,
