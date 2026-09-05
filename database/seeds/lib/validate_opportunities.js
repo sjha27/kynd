@@ -1,6 +1,7 @@
 const CONFIG = require('../config');
 const { ATLANTA_METRO_LOCATIONS, GEORGIA_LOCATIONS } = require('../data/content');
 const { ANCHOR_OPPORTUNITIES, PHYSICAL_LOCATIONS } = require('../data/opportunities');
+const { resolveAnchorDayOffset } = require('./opportunities');
 
 const UUID_V5_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const ALLOWED_TYPES = new Set(['volunteer', 'charity_event']);
@@ -62,7 +63,7 @@ function easternOffsetForDate(dateString) {
 }
 
 function expectedAnchorStart(specification) {
-  const dateString = calendarDateAtOffset(specification.dayOffset);
+  const dateString = calendarDateAtOffset(resolveAnchorDayOffset(specification));
   return new Date(
     `${dateString}T${specification.startTime}:00${easternOffsetForDate(dateString)}`
   ).toISOString();

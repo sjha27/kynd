@@ -72,6 +72,35 @@ function dayOfWeek(dayOffset) {
   return new Date(`${localDateAtOffset(dayOffset)}T12:00:00Z`).getUTCDay();
 }
 
+/*
+ * Resolves a weekday rule such as "the 4th Saturday after the reference date"
+ * into a concrete day offset.
+ *
+ * Anchor opportunities normally declare a literal `dayOffset`, which is fine
+ * for specs whose weekday does not matter. The flagship does care: it has to
+ * land on a Saturday far enough ahead that the recruiter journey stays usable
+ * after a refresh. A literal offset cannot express that, because the reference
+ * date's own weekday moves whenever the owner ages the world.
+ *
+ * Counting is strictly AFTER the reference date, so a reference date that is
+ * itself a Saturday yields the following Saturday rather than day zero. With
+ * occurrence 4 the result is always 22-28 days out, i.e. 3.1-4.0 weeks,
+ * whatever weekday the reference date falls on.
+ */
+function nthWeekdayOffset(weekday, occurrence) {
+  const referenceWeekday = dayOfWeek(0);
+  const firstOccurrence = ((weekday - referenceWeekday + 7) % 7) || 7;
+  return firstOccurrence + (occurrence - 1) * 7;
+}
+
+function resolveAnchorDayOffset(specification) {
+  if (specification.dayOffsetRule) {
+    const { weekday, occurrence } = specification.dayOffsetRule;
+    return nthWeekdayOffset(weekday, occurrence);
+  }
+  return specification.dayOffset;
+}
+
 function regionForEntity(entity) {
   return ['Atlanta', 'Decatur', 'Sandy Springs', 'Brookhaven', 'Marietta', 'Smyrna', 'Roswell', 'Alpharetta']
     .includes(entity.city)
@@ -313,7 +342,10 @@ function generateAnchorOpportunities(rng, causes, users, organizations) {
     const host = specification.hostUser
       ? userByName.get(specification.hostUser)
       : organizationByName.get(specification.hostOrganization);
-    const startsAt = easternDateTime(specification.dayOffset, specification.startTime);
+    const startsAt = easternDateTime(
+      resolveAnchorDayOffset(specification),
+      specification.startTime
+    );
     return opportunityRow({
       key: `anchor-${specification.key}`,
       title: specification.title,
@@ -789,4 +821,7 @@ module.exports = {
   buildOpportunityDiagnostics,
   commitmentBucket,
   durationMinutes,
+  // Shared with validation so the weekday rule has exactly one definition.
+  // Validation still independently asserts the resulting weekday and window.
+  resolveAnchorDayOffset,
 };

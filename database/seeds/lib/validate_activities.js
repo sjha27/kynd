@@ -194,7 +194,9 @@ function validateActivities(world) {
         assert(external.cause === cause.name,
           `manual activity ${activity.id} cause does not match external organization`);
       }
-      const manualKey = `${activity.userId}|${activity.occurredOn}|${activity.manualTitle}|${activity.manualOrgName}`;
+      // Identity is keyed on the per-user sequence, not occurredOn, so that
+      // ageing the world leaves manual-activity ids untouched.
+      const manualKey = `${activity.userId}|seq-${activity.manualSequence}|${activity.manualTitle}|${activity.manualOrgName}`;
       assert(activity.id === deterministicUuid('activity-manual', manualKey),
         `manual activity ${activity.id} does not have deterministic identity`);
       const dateKey = `${activity.userId}|${activity.occurredOn}`;

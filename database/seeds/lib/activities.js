@@ -1,6 +1,7 @@
 const CONFIG = require('../config');
 const { chance, pick, randomInt, weightedPick } = require('./random');
 const { deterministicUuid, stablePick } = require('./ids');
+const { timestampAtOffset, dateAtOffset: calendarDateAtOffset } = require('./calendar');
 const {
   haversineMiles,
   userOpportunityMiles,
@@ -21,27 +22,49 @@ const MANUAL_HOURS = Object.freeze([
   { value: 6, weight: 4 }, { value: 8, weight: 3 },
 ]);
 
+/*
+ * Anchor overrides pin the authored hours, stories and images behind Maya's
+ * and David's accepted profile history. Keyed by REGISTRATION id, which is
+ * derived from (userId, opportunityId) and so is stable across refreshes.
+ *
+ * These deliberately no longer pin `createdAt`. A confirmation timestamp is
+ * not one of the accepted profile metrics (Hours, Activities, Organizations,
+ * Amount Raised), and hardcoding it fought the chronology: the surrounding
+ * opportunity moves with WORLD_REFERENCE_DATE, so a fixed confirmation time
+ * could land before the opportunity it confirms had even ended. The generated
+ * `confirmationTimestamp(rng, opportunity.endsAt)` is always after the
+ * opportunity ends, so letting it stand keeps the world coherent at any
+ * reference date.
+ *
+ * The manual overrides below DO carry dates, because a manual activity has no
+ * opportunity to derive them from. They are expressed as offsets from the
+ * reference date — `days` is a whole-day offset and `time` is Atlanta-local
+ * wall time — converted from the accepted 2026-08-30 baseline so every
+ * relationship the owner signed off on is preserved exactly.
+ */
+const anchorOffsetTimestamp = timestampAtOffset;
+
 const ANCHOR_KYND_ACTIVITY_OVERRIDES = Object.freeze({
-  'e9c03813-a217-53f7-a857-6cbf5b689e76': { hours: 4, story: 'Worked alongside neighbors to refresh a shared space and prepare it for the next gathering.', imageUrl: '/demo-assets/activities/community/kynd-4.jpg', createdAt: '2026-03-21T08:00:00.000Z' },
-  '376ae75f-2125-5def-8ba9-27829c1bdddf': { hours: 4, story: 'Spent the morning clearing litter along the trail and helping reset a few overgrown sections.', imageUrl: '/demo-assets/activities/environment/kynd-5.jpg', createdAt: '2026-04-15T09:05:00.000Z' },
-  '697c33a8-63e3-5928-88a3-45e68164fd43': { hours: 4, story: 'Worked alongside neighbors to refresh a shared space and prepare it for the next gathering.', imageUrl: '/demo-assets/activities/community/kynd-6.jpg', createdAt: '2026-05-23T18:58:00.000Z' },
-  '3717cad9-aa45-5f72-959e-917fb1d734ec': { hours: 3, story: 'Packed meal boxes with a great crew and helped organize the final pickup tables.', imageUrl: null, createdAt: '2026-07-14T13:40:00.000Z' },
-  '631b9a75-7fe3-5ff7-b027-654f70b72b74': { hours: 4, story: 'Worked alongside neighbors to refresh a shared space and prepare it for the next gathering.', imageUrl: '/demo-assets/activities/community/kynd-10.jpg', createdAt: '2026-03-21T04:23:00.000Z' },
-  '9c0e533b-26d3-52da-806d-f2366cba820c': { hours: 4, story: 'Worked alongside neighbors to refresh a shared space and prepare it for the next gathering.', imageUrl: '/demo-assets/activities/community/kynd-11.jpg', createdAt: '2026-03-30T22:43:00.000Z' },
-  '3c5e82f3-26b0-5024-b163-4d0b889af1c7': { hours: 1.5, story: 'Set up learning materials and supported students as they worked through the activity stations.', imageUrl: '/demo-assets/activities/education/kynd-0.jpg', createdAt: '2026-05-07T00:53:00.000Z' },
-  '38bbd51f-2b34-594a-af07-149b7f5c2a95': { hours: 4, story: 'Prepared career materials and helped the workshop team keep each session running smoothly.', imageUrl: null, createdAt: '2026-06-11T23:18:00.000Z' },
-  'e49f883f-8389-5465-b062-1e23e4d782be': { hours: 5, story: null, imageUrl: '/demo-assets/activities/community/kynd-2.jpg', createdAt: '2026-06-21T01:52:00.000Z' },
-  '6fc01e98-d7bb-56d5-96e2-d95bb7b01d85': { hours: 1, story: null, imageUrl: '/demo-assets/activities/education/kynd-3.jpg', createdAt: '2026-06-25T07:58:00.000Z' },
-  'e4f4c198-47e0-5db6-96f7-a7888aa132c1': { hours: 2, story: null, imageUrl: null, createdAt: '2026-06-27T23:36:00.000Z' },
-  'e8691f7a-ba3c-5f5e-bd9b-7bca1c824240': { hours: 3, story: 'Spent a few hours on practical neighborhood work with a crew that made the day feel easy.', imageUrl: null, createdAt: '2026-07-12T01:46:00.000Z' },
-  'a0698bf0-0440-5470-af49-08a3d405c297': { hours: 2, story: null, imageUrl: '/demo-assets/activities/veterans/kynd-6.jpg', createdAt: '2026-08-08T03:11:00.000Z' },
+  'e9c03813-a217-53f7-a857-6cbf5b689e76': { hours: 4, story: 'Worked alongside neighbors to refresh a shared space and prepare it for the next gathering.', imageUrl: '/demo-assets/activities/community/kynd-4.jpg' },
+  '376ae75f-2125-5def-8ba9-27829c1bdddf': { hours: 4, story: 'Spent the morning clearing litter along the trail and helping reset a few overgrown sections.', imageUrl: '/demo-assets/activities/environment/kynd-5.jpg' },
+  '697c33a8-63e3-5928-88a3-45e68164fd43': { hours: 4, story: 'Worked alongside neighbors to refresh a shared space and prepare it for the next gathering.', imageUrl: '/demo-assets/activities/community/kynd-6.jpg' },
+  '3717cad9-aa45-5f72-959e-917fb1d734ec': { hours: 3, story: 'Packed meal boxes with a great crew and helped organize the final pickup tables.', imageUrl: null },
+  '631b9a75-7fe3-5ff7-b027-654f70b72b74': { hours: 4, story: 'Worked alongside neighbors to refresh a shared space and prepare it for the next gathering.', imageUrl: '/demo-assets/activities/community/kynd-10.jpg' },
+  '9c0e533b-26d3-52da-806d-f2366cba820c': { hours: 4, story: 'Worked alongside neighbors to refresh a shared space and prepare it for the next gathering.', imageUrl: '/demo-assets/activities/community/kynd-11.jpg' },
+  '3c5e82f3-26b0-5024-b163-4d0b889af1c7': { hours: 1.5, story: 'Set up learning materials and supported students as they worked through the activity stations.', imageUrl: '/demo-assets/activities/education/kynd-0.jpg' },
+  '38bbd51f-2b34-594a-af07-149b7f5c2a95': { hours: 4, story: 'Prepared career materials and helped the workshop team keep each session running smoothly.', imageUrl: null },
+  'e49f883f-8389-5465-b062-1e23e4d782be': { hours: 5, story: null, imageUrl: '/demo-assets/activities/community/kynd-2.jpg' },
+  '6fc01e98-d7bb-56d5-96e2-d95bb7b01d85': { hours: 1, story: null, imageUrl: '/demo-assets/activities/education/kynd-3.jpg' },
+  'e4f4c198-47e0-5db6-96f7-a7888aa132c1': { hours: 2, story: null, imageUrl: null },
+  'e8691f7a-ba3c-5f5e-bd9b-7bca1c824240': { hours: 3, story: 'Spent a few hours on practical neighborhood work with a crew that made the day feel easy.', imageUrl: null },
+  'a0698bf0-0440-5470-af49-08a3d405c297': { hours: 2, story: null, imageUrl: '/demo-assets/activities/veterans/kynd-6.jpg' },
 });
 
 const ANCHOR_MANUAL_ACTIVITY_OVERRIDES = Object.freeze({
-  'Maya Ellis|1': { occurredOn: '2026-08-16', title: 'Westside Community Garden Morning', story: 'Spent a few hours on practical neighborhood work with a crew that made the day feel easy.', imageUrl: '/demo-assets/activities/community/manual-0.jpg', createdAt: '2026-08-17T15:37:00.000Z' },
-  'David Mercer|1': { occurredOn: '2026-06-12', title: 'Neighborhood Welcome Day', story: 'Spent a few hours on practical neighborhood work with a crew that made the day feel easy.', imageUrl: '/demo-assets/activities/community/manual-1.jpg', createdAt: '2026-06-13T12:19:00.000Z' },
-  'David Mercer|2': { occurredOn: '2026-03-19', title: 'Community Tutoring Session', story: 'Worked with students on assignments and helped them prepare for next week’s project.', imageUrl: '/demo-assets/activities/education/manual-2.jpg', createdAt: '2026-03-21T13:32:00.000Z' },
-  'David Mercer|3': { occurredOn: '2026-01-25', title: 'Career Workshop Support', story: 'Prepared career materials and helped the workshop team keep each session running smoothly.', imageUrl: null, createdAt: '2026-01-28T19:14:00.000Z' },
+  'Maya Ellis|1': { occurredOn: calendarDateAtOffset(-14), title: 'Westside Community Garden Morning', story: 'Spent a few hours on practical neighborhood work with a crew that made the day feel easy.', imageUrl: '/demo-assets/activities/community/manual-0.jpg', createdAt: anchorOffsetTimestamp(-13, '11:37') },
+  'David Mercer|1': { occurredOn: calendarDateAtOffset(-79), title: 'Neighborhood Welcome Day', story: 'Spent a few hours on practical neighborhood work with a crew that made the day feel easy.', imageUrl: '/demo-assets/activities/community/manual-1.jpg', createdAt: anchorOffsetTimestamp(-78, '08:19') },
+  'David Mercer|2': { occurredOn: calendarDateAtOffset(-164), title: 'Community Tutoring Session', story: 'Worked with students on assignments and helped them prepare for next week’s project.', imageUrl: '/demo-assets/activities/education/manual-2.jpg', createdAt: anchorOffsetTimestamp(-162, '09:32') },
+  'David Mercer|3': { occurredOn: calendarDateAtOffset(-217), title: 'Career Workshop Support', story: 'Prepared career materials and helped the workshop team keep each session running smoothly.', imageUrl: null, createdAt: anchorOffsetTimestamp(-214, '14:14') },
 });
 
 function shuffled(rng, values) {
@@ -438,6 +461,9 @@ function manualActivity(rng, spec, index, world, maps, usedDatesByUser) {
       ? `/demo-assets/activities/${concept.cause.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/manual-${index % 10}.jpg`
       : null,
     createdAt: manualCreatedAt(rng, occurredOn, user),
+    // Generator-only field: the stable per-user ordinal this activity's
+    // identity is derived from. Not a database column.
+    manualSequence: spec.sequence,
   };
   if (authored) {
     activity.manualTitle = authored.title;
@@ -445,9 +471,13 @@ function manualActivity(rng, spec, index, world, maps, usedDatesByUser) {
     activity.imageUrl = authored.imageUrl;
     activity.createdAt = authored.createdAt;
   }
+  // Keyed on the user's manual-activity sequence rather than occurredOn, so
+  // the id survives a WORLD_REFERENCE_DATE change. (userId, sequence) is
+  // already treated as unique — the anchor override table is keyed on it.
   return {
     id: deterministicUuid('activity-manual', [
-      activity.userId, activity.occurredOn, activity.manualTitle, activity.manualOrgName,
+      activity.userId, `seq-${activity.manualSequence}`,
+      activity.manualTitle, activity.manualOrgName,
     ].join('|')),
     ...activity,
   };

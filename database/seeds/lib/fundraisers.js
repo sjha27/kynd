@@ -324,10 +324,19 @@ function generateFundraisers(rng, world) {
         : null,
       status: slot.lifecycle === 'cancelled' ? 'cancelled' : 'active',
       createdAt: timing.createdAt,
+      // Generator-only field: the stable ordinal this fundraiser's identity
+      // is derived from. Not a database column — the loader maps columns
+      // explicitly and ignores it.
+      slotIndex: index + 1,
     };
+    // Keyed on the generation slot rather than createdAt so a fundraiser's
+    // identity survives a WORLD_REFERENCE_DATE change. Including a timestamp
+    // here would reissue this id (and every support, reaction and comment
+    // that points at it) every time the world is aged.
     created.id = deterministicUuid('fundraiser', [
       created.creatorUserId || created.creatorOrganizationId,
-      created.beneficiaryName, created.title, created.createdAt,
+      created.beneficiaryName, created.title,
+      `slot-${String(created.slotIndex).padStart(4, '0')}`,
     ].join('|'));
     fundraisers.push(created);
     beneficiaryCounts.set(beneficiaryName, (beneficiaryCounts.get(beneficiaryName) || 0) + 1);

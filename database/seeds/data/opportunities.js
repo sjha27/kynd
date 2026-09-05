@@ -554,8 +554,14 @@ const ANCHOR_OPPORTUNITIES = [
   {
     key: 'riverlight-flagship-cleanup', hostOrganization: 'Riverlight Atlanta',
     title: 'Piedmont Park Community Cleanup', cause: 'Environment', type: 'volunteer',
-    locationKey: 'atlanta-piedmont', dayOffset: 0, startTime: '14:00', duration: 180, capacity: 25,
-    description: 'Spend Sunday afternoon caring for one of Atlanta’s most-used shared green spaces with Riverlight Atlanta.',
+    // The flagship carries the recruiter journey, so its date is a rule
+    // rather than a literal: the 4th Saturday after WORLD_REFERENCE_DATE
+    // (22-28 days out). That keeps it a weekend morning and keeps it from
+    // expiring days after the world is refreshed.
+    locationKey: 'atlanta-piedmont',
+    dayOffsetRule: { weekday: 6, occurrence: 4 },
+    startTime: '09:00', duration: 180, capacity: 25,
+    description: 'Spend Saturday morning caring for one of Atlanta’s most-used shared green spaces with Riverlight Atlanta.',
     tasks: 'Work in small teams to collect litter, sort recyclables, and clear light debris from paths and gathering areas.',
     requirements: 'Wear closed-toe shoes and weather-appropriate clothing. Gloves, grabbers, and water are provided.',
     flagship: true,

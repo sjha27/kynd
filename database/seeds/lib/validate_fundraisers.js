@@ -272,9 +272,13 @@ function validateFundraisers(world) {
       `fundraiser ${fundraiser.id} ends before its creation date`);
 
     if (!anchorTitles.has(fundraiser.title)) {
+      // Identity is keyed on the generation slot, not createdAt, so that
+      // ageing the world leaves fundraiser ids (and everything pointing at
+      // them) untouched.
       const expectedId = deterministicUuid('fundraiser', [
         fundraiser.creatorUserId || fundraiser.creatorOrganizationId,
-        fundraiser.beneficiaryName, fundraiser.title, fundraiser.createdAt,
+        fundraiser.beneficiaryName, fundraiser.title,
+        `slot-${String(fundraiser.slotIndex).padStart(4, '0')}`,
       ].join('|'));
       assert(fundraiser.id === expectedId, `fundraiser ${fundraiser.id} identity is not deterministic`);
       const allowedGoals = hasUserCreator ? allowedUserGoals : allowedOrganizationGoals;

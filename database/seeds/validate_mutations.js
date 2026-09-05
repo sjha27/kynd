@@ -12,6 +12,26 @@ const { deriveProfileMetrics } = require('./lib/activities');
 const { ANCHOR_COMMENTS } = require('./data/social');
 const { CITY_CENTROIDS, userOpportunityMiles } = require('./lib/geography');
 
+/*
+ * Mutation fixtures are positioned relative to the world's reference date.
+ *
+ * These used to be absolute literals anchored to 2026-08-30. Once
+ * WORLD_REFERENCE_DATE became configurable those stopped meaning what they
+ * said: a timestamp authored as "one day after the anchor" silently became a
+ * timestamp BEFORE the anchor, so validation correctly accepted rows the
+ * suite expected it to reject. Offsets keep each case's intent at any
+ * reference date.
+ */
+function anchorDay(dayOffset) {
+  const date = new Date(`${CONFIG.anchorDate.slice(0, 10)}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + dayOffset);
+  return date.toISOString().slice(0, 10);
+}
+
+function anchorUtc(dayOffset, time) {
+  return new Date(`${anchorDay(dayOffset)}T${time}Z`).toISOString();
+}
+
 const UNKNOWN_UUID = '00000000-0000-5000-8000-000000000000';
 
 function opportunity(world, predicate = () => true) {
@@ -83,10 +103,13 @@ function retargetSocialRow(row, key, id) {
   row[key] = id;
 }
 
+// Mirrors the generator's identity keys, which are date-free so that ageing
+// the world does not reissue ids. See database/seeds/lib/fundraisers.js.
 function resetFundraiserId(row) {
   row.id = deterministicUuid('fundraiser', [
     row.creatorUserId || row.creatorOrganizationId,
-    row.beneficiaryName, row.title, row.createdAt,
+    row.beneficiaryName, row.title,
+    `slot-${String(row.slotIndex).padStart(4, '0')}`,
   ].join('|'));
 }
 
@@ -96,7 +119,7 @@ function resetFundraiserSupportId(row) {
 
 function resetManualActivityId(row) {
   row.id = deterministicUuid('activity-manual', [
-    row.userId, row.occurredOn, row.manualTitle, row.manualOrgName,
+    row.userId, `seq-${row.manualSequence}`, row.manualTitle, row.manualOrgName,
   ].join('|'));
 }
 
@@ -165,16 +188,16 @@ const MUTATIONS = [
     item.endsAt = new Date(new Date(item.startsAt).getTime() - 60000).toISOString();
   }],
   ['created before host existed', (world) => { world.opportunities[0].createdAt = '2000-01-01T00:00:00.000Z'; }],
-  ['created after anchor snapshot', (world) => { world.opportunities[0].createdAt = '2026-08-31T00:00:00.000Z'; }],
+  ['created after anchor snapshot', (world) => { world.opportunities[0].createdAt = anchorUtc(1, '00:00:00.000'); }],
   ['upcoming event placed in past', (world) => {
     const item = opportunity(world, (candidate) => candidate.timeBucket === 'upcoming' && !candidate.anchor);
-    item.startsAt = '2026-08-29T14:00:00.000Z';
-    item.endsAt = '2026-08-29T16:00:00.000Z';
+    item.startsAt = anchorUtc(-1, '14:00:00.000');
+    item.endsAt = anchorUtc(-1, '16:00:00.000');
   }],
   ['recent-past event placed in future', (world) => {
     const item = opportunity(world, (candidate) => candidate.timeBucket === 'recent_past');
-    item.startsAt = '2026-09-02T14:00:00.000Z';
-    item.endsAt = '2026-09-02T16:00:00.000Z';
+    item.startsAt = anchorUtc(3, '14:00:00.000');
+    item.endsAt = anchorUtc(3, '16:00:00.000');
   }],
   ['invalid online location shape', (world) => {
     const item = opportunity(world, (candidate) => candidate.isOnline);
@@ -253,9 +276,9 @@ const MUTATIONS = [
   }],
   ['registration joined after anchor snapshot', (world) => {
     const row = registration(world, (candidate, item) => (
-      new Date(item.startsAt) > new Date('2026-09-01T00:00:00.000Z')
+      new Date(item.startsAt) > new Date(anchorUtc(2, '00:00:00.000'))
     ));
-    row.joinedAt = '2026-08-31T12:00:00.000Z';
+    row.joinedAt = anchorUtc(1, '12:00:00.000');
   }],
   ['registration cancelled after opportunity starts', (world) => {
     const row = registration(world, (candidate) => candidate.status === 'cancelled');
@@ -341,8 +364,8 @@ const MUTATIONS = [
     row.savedAt = new Date(new Date(item.createdAt).getTime() - 60000).toISOString();
   }],
   ['save after anchor snapshot', (world) => {
-    const row = save(world, (candidate, item) => new Date(item.startsAt) > new Date('2026-09-01T00:00:00.000Z'));
-    row.savedAt = '2026-08-31T12:00:00.000Z';
+    const row = save(world, (candidate, item) => new Date(item.startsAt) > new Date(anchorUtc(2, '00:00:00.000')));
+    row.savedAt = anchorUtc(1, '12:00:00.000');
   }],
   ['save after opportunity starts', (world) => {
     const row = world.savedOpportunities[0];
@@ -363,8 +386,8 @@ const MUTATIONS = [
   ['activity missing user', (world) => { world.activities[0].userId = UNKNOWN_UUID; }],
   ['activity with zero hours', (world) => { world.activities[0].hours = 0; }],
   ['activity with negative hours', (world) => { world.activities[0].hours = -1; }],
-  ['activity occurrence in future', (world) => { world.activities[0].occurredOn = '2026-09-01'; }],
-  ['activity created after anchor', (world) => { world.activities[0].createdAt = '2026-08-31T00:00:00.000Z'; }],
+  ['activity occurrence in future', (world) => { world.activities[0].occurredOn = anchorDay(2); }],
+  ['activity created after anchor', (world) => { world.activities[0].createdAt = anchorUtc(1, '00:00:00.000'); }],
   ['Kynd activity missing registration reference', (world) => {
     const row = activity(world, (candidate) => candidate.registrationId !== null);
     row.registrationId = null;
@@ -523,8 +546,8 @@ const MUTATIONS = [
   }],
   ['wrong fundraiser lifecycle totals', (world) => {
     const row = fundraiser(world, (item) => item.status === 'active'
-      && item.endDate >= '2026-08-30' && !item.title.includes('Waterways'));
-    row.endDate = '2026-08-29';
+      && item.endDate >= anchorDay(0) && !item.title.includes('Waterways'));
+    row.endDate = anchorDay(-1);
   }],
   ['wrong fundraiser beneficiary split', (world) => {
     const row = fundraiser(world, (item) => item.beneficiaryOrganizationId
@@ -532,6 +555,7 @@ const MUTATIONS = [
     const cause = world.causes.find((item) => item.id === row.causeId).name;
     const external = require('./data/fundraisers').EXTERNAL_FUNDRAISER_BENEFICIARIES
       .find((item) => item.cause === cause);
+
     row.beneficiaryOrganizationId = null;
     row.beneficiaryName = external.name;
     resetFundraiserId(row);
@@ -578,7 +602,7 @@ const MUTATIONS = [
   ['fundraiser implausible goal', (world) => { world.fundraisers[4].goalAmountCents = 100000000; }],
   ['fundraiser created after anchor', (world) => {
     const row = world.fundraisers[4];
-    row.createdAt = '2026-08-31T00:00:00.000Z';
+    row.createdAt = anchorUtc(1, '00:00:00.000');
     resetFundraiserId(row);
   }],
   ['fundraiser end before creation date', (world) => {
@@ -654,10 +678,10 @@ const MUTATIONS = [
     row.supportedAt = new Date(new Date(campaign.createdAt).getTime() - 60000).toISOString();
   }],
   ['fundraiser support after anchor', (world) => {
-    world.fundraiserSupports[0].supportedAt = '2026-08-31T00:00:00.000Z';
+    world.fundraiserSupports[0].supportedAt = anchorUtc(1, '00:00:00.000');
   }],
   ['fundraiser support after campaign end', (world) => {
-    const row = fundraiserSupport(world, (item, campaign) => campaign.endDate < '2026-08-30');
+    const row = fundraiserSupport(world, (item, campaign) => campaign.endDate < anchorDay(0));
     const campaign = fundraiser(world, (item) => item.id === row.fundraiserId);
     row.supportedAt = new Date(`${campaign.endDate}T23:59:59-04:00`).toISOString();
     row.supportedAt = new Date(new Date(row.supportedAt).getTime() + 60000).toISOString();
@@ -679,7 +703,7 @@ const MUTATIONS = [
     const campaign = fundraiser(world, (item) => item.title === '100 Meal Boxes for Atlanta Families');
     const row = fundraiserSupport(world, (item) => item.fundraiserId === campaign.id);
     const destination = fundraiser(world, (item) => item.id !== campaign.id
-      && item.status === 'active' && item.endDate >= '2026-08-30'
+      && item.status === 'active' && item.endDate >= anchorDay(0)
       && item.goalAmountCents >= row.amountCents
       && !world.fundraiserSupports.some((support) => support.userId === row.userId
         && support.fundraiserId === item.id));
@@ -717,7 +741,7 @@ const MUTATIONS = [
     const campaign = fundraiser(world, (item) => item.title === 'Roswell Veterans Resource Day Fund');
     const row = fundraiserSupport(world, (item) => item.fundraiserId === campaign.id);
     const destination = fundraiser(world, (item) => item.id !== campaign.id
-      && item.status === 'active' && item.endDate >= '2026-08-30'
+      && item.status === 'active' && item.endDate >= anchorDay(0)
       && item.goalAmountCents >= row.amountCents
       && !world.fundraiserSupports.some((support) => support.userId === row.userId
         && support.fundraiserId === item.id));
@@ -748,7 +772,7 @@ const MUTATIONS = [
     const campaign = fundraiser(world, (item) => item.title === "Keep Atlanta's Waterways Clean This Fall");
     const row = fundraiserSupport(world, (item) => item.fundraiserId === campaign.id);
     const destination = fundraiser(world, (item) => item.id !== campaign.id
-      && item.status === 'active' && item.endDate >= '2026-08-30'
+      && item.status === 'active' && item.endDate >= anchorDay(0)
       && item.goalAmountCents >= row.amountCents
       && !world.fundraiserSupports.some((support) => support.userId === row.userId
         && support.fundraiserId === item.id));
@@ -760,7 +784,7 @@ const MUTATIONS = [
     fundraiserSupport(world, (item) => item.fundraiserId === campaign.id && item.amountCents === 5000).amountCents = 10000;
   }],
   ['Mosaic fundraiser no longer ended', (world) => {
-    fundraiser(world, (item) => item.title === 'Summer Meal Box Fund').endDate = '2026-09-30';
+    fundraiser(world, (item) => item.title === 'Summer Meal Box Fund').endDate = anchorDay(31);
   }],
   ['wrong reaction count', (world) => { world.reactions.pop(); }],
   ['wrong reaction target distribution', (world) => {
@@ -855,7 +879,7 @@ const MUTATIONS = [
     const target = activity(world, (item) => item.id === row.activityId);
     row.createdAt = new Date(new Date(target.createdAt).getTime() - 60000).toISOString();
   }],
-  ['reaction after anchor', (world) => { world.reactions[0].createdAt = '2026-08-31T00:00:00.000Z'; }],
+  ['reaction after anchor', (world) => { world.reactions[0].createdAt = anchorUtc(1, '00:00:00.000'); }],
   ['wrong comment count', (world) => { world.comments.pop(); }],
   ['wrong comment target distribution', (world) => {
     const row = comment(world, (item) => item.activityId);
@@ -929,7 +953,7 @@ const MUTATIONS = [
     const target = activity(world, (item) => item.id === row.activityId);
     row.createdAt = new Date(new Date(target.createdAt).getTime() - 60000).toISOString();
   }],
-  ['comment after anchor', (world) => { world.comments[0].createdAt = '2026-08-31T00:00:00.000Z'; }],
+  ['comment after anchor', (world) => { world.comments[0].createdAt = anchorUtc(1, '00:00:00.000'); }],
   ['joined-style Opportunity comment without registration', (world) => {
     const row = comment(world, (item) => item.opportunityId && !world.registrations.some(
       (registrationRow) => registrationRow.userId === item.userId

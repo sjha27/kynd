@@ -30,17 +30,28 @@ const DAVID_JOINED_OPPORTUNITY_IDS = Object.freeze([
 const DAVID_CANCELLED_OPPORTUNITY_IDS = Object.freeze([
   'e45c8b69-f26a-5983-a131-e859b5dc90a5', '06b411a8-f9c7-5444-bd93-fa01f910a466',
 ]);
+/*
+ * Which opportunities the anchor users have saved. Opportunity ids are stable
+ * across refreshes, so pinning the choice is safe.
+ *
+ * The saved-at timestamps are deliberately NOT pinned here. They used to be
+ * absolute, which broke as soon as WORLD_REFERENCE_DATE moved: the opportunity
+ * shifted with the world while the authored save stayed put, producing saves
+ * that predated the opportunity's own creation. savedDate() derives a
+ * timestamp inside the valid window instead, so it stays correct at any
+ * reference date.
+ */
 const ANCHOR_SAVES = Object.freeze({
   'Maya Ellis': [
-    ['4643d3da-b781-5b18-b06a-d7bc656520da', '2026-01-14T19:12:10.189Z'],
-    ['a1fe22df-3349-5cab-a889-a77c894cb99a', '2025-10-26T15:38:50.389Z'],
-    ['ef93783b-8931-5d3e-850e-3ecc43b0f74c', '2026-08-22T23:54:40.155Z'],
-    ['ba95c10a-fc5e-5796-b482-a832cf42d9fd', '2026-08-12T12:42:37.613Z'],
+    '4643d3da-b781-5b18-b06a-d7bc656520da',
+    'a1fe22df-3349-5cab-a889-a77c894cb99a',
+    'ef93783b-8931-5d3e-850e-3ecc43b0f74c',
+    'ba95c10a-fc5e-5796-b482-a832cf42d9fd',
   ],
   'David Mercer': [
-    ['2ab08881-367c-5852-a960-644c5efbd23c', '2026-05-22T17:10:21.655Z'],
-    ['c2fba5ec-a2e8-59c5-9e12-4ef2155f751d', '2026-08-18T21:25:51.256Z'],
-    ['c3c178d0-f904-5d1d-b467-7f66800afb0a', '2025-11-19T09:13:23.135Z'],
+    '2ab08881-367c-5852-a960-644c5efbd23c',
+    'c2fba5ec-a2e8-59c5-9e12-4ef2155f751d',
+    'c3c178d0-f904-5d1d-b467-7f66800afb0a',
   ],
 });
 
@@ -398,15 +409,18 @@ function generateParticipation(rng, world) {
         item,
         weight: affinity(user, item, participantsByOpportunity.get(item.id), signals, causeById, appeal),
       }));
-      const authored = ANCHOR_SAVES[user.displayName]?.[index];
-      const selected = authored
-        ? opportunityById.get(authored[0])
+      const authoredOpportunityId = ANCHOR_SAVES[user.displayName]?.[index];
+      const selected = authoredOpportunityId
+        ? opportunityById.get(authoredOpportunityId)
         : weightedPick(rng, weighted).item;
       selectedIds.add(selected.id);
       savedOpportunities.push({
         userId: user.id,
         opportunityId: selected.id,
-        savedAt: authored ? (savedDate(rng, user, selected), authored[1]) : savedDate(rng, user, selected),
+        // Derived in both branches. The authored branch already drew from the
+        // rng to keep the stream aligned; it now keeps the value instead of
+        // discarding it for a hardcoded date.
+        savedAt: savedDate(rng, user, selected),
       });
     }
   }

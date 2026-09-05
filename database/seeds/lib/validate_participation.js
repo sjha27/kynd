@@ -149,8 +149,12 @@ function validateParticipation(world) {
   }
   for (const [name, expected] of Object.entries(ANCHOR_SAVES)) {
     const user = world.users.find((candidate) => candidate.displayName === name);
+    // The approved fact is WHICH opportunities the anchor users saved, in
+    // order. savedAt is derived per refresh and is already constrained above
+    // to sit after user and opportunity creation, at or before the reference
+    // snapshot, and before the opportunity starts.
     const actual = world.savedOpportunities.filter((row) => row.userId === user.id)
-      .map((row) => [row.opportunityId, row.savedAt]);
+      .map((row) => row.opportunityId);
     assert(JSON.stringify(actual) === JSON.stringify(expected),
       `${name} approved saved-Opportunity history changed`);
   }

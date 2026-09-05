@@ -1,8 +1,86 @@
+/*
+ * ============================================================================
+ * WORLD_REFERENCE_DATE — the one value an owner changes to age Kynd forward.
+ * ============================================================================
+ *
+ * This is the calendar date the fictional Atlanta world treats as "today"
+ * when the seed is generated. Every synthetic product-world timestamp is
+ * derived from it, so moving this date moves the whole ecosystem coherently:
+ * completed activities stay historical, upcoming opportunities stay upcoming,
+ * and cross-table chronology is preserved.
+ *
+ * It is an Atlanta-local calendar date (America/New_York), written date-only
+ * on purpose. `anchorDate` below converts it into the exact instant the
+ * generator uses, attaching the correct offset (EDT -04:00 / EST -05:00) for
+ * that day so a bare YYYY-MM-DD can never be parsed as UTC and silently slip
+ * to the previous evening.
+ *
+ * This is NOT the machine clock. Never replace it with new Date()/Date.now();
+ * doing so would make generation non-reproducible.
+ *
+ * ---------------------------------------------------------------------------
+ * MOVE THIS DATE IN WHOLE WEEKS. This is the one hard rule.
+ * ---------------------------------------------------------------------------
+ * Opportunity scheduling is weekday-aware: weekend events must fall on real
+ * weekends, so the generator retries candidate times until the weekday fits.
+ * Advancing by a multiple of 7 keeps every day-offset on the same weekday,
+ * which keeps those retries identical and therefore keeps the shared RNG
+ * stream aligned — the same 500 people, 250 organizations and 2,000
+ * opportunities, simply aged forward.
+ *
+ * Advancing by anything else changes each offset's weekday, realigns the RNG
+ * stream, and silently rewrites attributes across the marketplace. Measured:
+ * a 5-day shift kept all 2,000 opportunity ids but changed the title,
+ * duration, capacity, cause or host of 1,176 of them, and broke validation.
+ * A 7-day shift changed nothing.
+ *
+ * Every value below is 2026-08-30 plus a whole number of weeks:
+ *   2026-09-06 (+1w)   2026-10-04 (+5w)   2026-12-06 (+14w)
+ *
+ * To age the world: change this one line, regenerate, validate, reload.
+ * See database/loader/README.md ("Refreshing the synthetic world").
+ */
+const WORLD_REFERENCE_DATE = '2026-09-06';
+
+const WORLD_TIMEZONE = 'America/New_York';
+
+/*
+ * Resolves the UTC offset Atlanta is actually on for a given calendar day, so
+ * the reference instant lands at local noon in every season. Probing at 12:00
+ * UTC keeps the lookup on the intended calendar day worldwide, and noon local
+ * keeps the instant far from both DST transitions and midnight rollover.
+ */
+function worldTimezoneOffset(dateOnly) {
+  const offset = new Intl.DateTimeFormat('en-US', {
+    timeZone: WORLD_TIMEZONE,
+    timeZoneName: 'longOffset',
+  })
+    .formatToParts(new Date(`${dateOnly}T12:00:00Z`))
+    .find((part) => part.type === 'timeZoneName').value;
+
+  // Intl reports "GMT-04:00"; the generator wants a bare ISO offset.
+  return offset.replace('GMT', '') || '+00:00';
+}
+
+function worldReferenceInstant(dateOnly) {
+  return `${dateOnly}T12:00:00${worldTimezoneOffset(dateOnly)}`;
+}
+
 const CONFIG = Object.freeze({
+  /*
+   * The RNG seed only looks like a date — it is an arbitrary constant that
+   * fixes WHICH fictional people, organizations and opportunities exist.
+   * Leave it alone when changing WORLD_REFERENCE_DATE: changing it would
+   * regenerate a different universe rather than ageing this one.
+   */
   seed: 20260830,
 
-  // Fixed clock for reproducible demo data.
-  anchorDate: '2026-08-30T12:00:00-04:00',
+  worldReferenceDate: WORLD_REFERENCE_DATE,
+  worldTimezone: WORLD_TIMEZONE,
+
+  // Fixed clock for reproducible demo data, derived from the reference date
+  // above. Every generator reads this rather than a literal calendar value.
+  anchorDate: worldReferenceInstant(WORLD_REFERENCE_DATE),
 
   counts: {
     users: 500,
