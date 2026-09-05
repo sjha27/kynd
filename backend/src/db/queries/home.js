@@ -74,7 +74,10 @@ async function findFollowedPersonActivities(followedUserIds) {
        a.id,
        a.user_id,
        u.display_name AS person_name,
-       a.occurred_on,
+       -- Same calendar-date rule findCompletedForSession uses: this is the
+       -- same activities.occurred_on column, so it crosses the API boundary
+       -- as 'YYYY-MM-DD' rather than as an instant.
+       to_char(a.occurred_on, 'YYYY-MM-DD') AS occurred_on,
        a.hours,
        a.story,
        a.image_url,

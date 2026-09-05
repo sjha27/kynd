@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { CalendarCheck, History, Bookmark } from 'lucide-react';
 import PageContainer from '../components/layout/PageContainer';
 import EmptyState from '../components/ui/EmptyState';
@@ -137,6 +137,8 @@ function Upcoming({ items, awaitingConfirmation, status, onReload }) {
 }
 
 function Completed({ items, status, onReload }) {
+  const navigate = useNavigate();
+
   if (status === 'loading' && items.length === 0) {
     return (
       <div className="space-y-4">
@@ -163,6 +165,11 @@ function Completed({ items, status, onReload }) {
         icon={History}
         title="No history yet"
         description="Once you take part in something, it becomes part of your history — the hours, the photos, and the story if you want to tell one."
+        action={
+          <Button variant="secondary" onClick={() => navigate('/create/log')}>
+            Log something you did
+          </Button>
+        }
       />
     );
   }
@@ -177,7 +184,10 @@ function Completed({ items, status, onReload }) {
 }
 
 function Activity() {
-  const [active, setActive] = useState('upcoming');
+  // Logging an activity lands here on Completed, where the new entry is —
+  // rather than on Upcoming, which has nothing to do with what just happened.
+  const location = useLocation();
+  const [active, setActive] = useState(location.state?.tab ?? 'upcoming');
   const { state, reload } = useActivity();
 
   const TABS = [

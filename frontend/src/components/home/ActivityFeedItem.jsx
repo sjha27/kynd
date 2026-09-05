@@ -2,16 +2,13 @@ import { Link } from 'react-router-dom';
 import Avatar from '../ui/Avatar';
 import Photo from '../ui/Photo';
 import { avatarImage } from '../../lib/media';
+import { formatCalendarDate } from '../../lib/format';
 
 // occurred_on is a plain DATE, not a timestamp — a short "Aug 23" reads
 // correctly regardless of viewer timezone, unlike reusing the timed
 // opportunity formatters which would imply a time of day that isn't real.
 function formatActivityDate(dateStr) {
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'America/New_York',
-  });
+  return formatCalendarDate(dateStr);
 }
 
 /*

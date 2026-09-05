@@ -1,12 +1,10 @@
 import Photo from '../ui/Photo';
+import { formatCalendarDate } from '../../lib/format';
 
+// occurred_on is a calendar date; formatCalendarDate renders it without
+// timezone conversion, so the day shown is always the day stored.
 function formatActivityDate(dateStr) {
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: 'America/New_York',
-  });
+  return formatCalendarDate(dateStr, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 /*
@@ -31,6 +29,11 @@ function CompletedActivityCard({ activity }) {
           {activity.hours ? ` · ${activity.hours} ${activity.hours === 1 ? 'hour' : 'hours'}` : ''}
           {activity.host ? ` · ${activity.host.name}` : ''}
         </p>
+        {/* Self-reported contribution from outside Kynd is labelled as such
+            rather than presented as a Kynd-hosted activity. */}
+        {activity.source === 'manual' && (
+          <p className="mt-1.5 text-[12px] font-medium text-ink-subtle">Logged by you</p>
+        )}
         {activity.cause?.name && (
           <p className="mt-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-subtle">
             {activity.cause.name}

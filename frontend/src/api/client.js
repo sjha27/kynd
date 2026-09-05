@@ -111,6 +111,16 @@ function fetchActivity(options) {
   return apiGet('/api/v1/activity', options);
 }
 
+// Manual logging: contribution that happened outside Kynd. The acting user
+// still comes from the session — the body is only the visitor's account of
+// their own participation.
+function logActivity({ title, causeName, organizationName, occurredOn, hours, story }, options) {
+  return apiPost('/api/v1/activities', {
+    ...options,
+    body: { title, causeName, organizationName, occurredOn, hours, story },
+  });
+}
+
 function fetchHome(options) {
   return apiGet('/api/v1/home', options);
 }
@@ -159,6 +169,7 @@ export {
   joinOpportunity,
   completeOpportunity,
   fetchActivity,
+  logActivity,
   fetchHome,
   createDemoSession,
   fetchCurrentDemoSession,

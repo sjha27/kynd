@@ -56,6 +56,28 @@ export function formatDayRange(startsAt, endsAt) {
   return `${base} · ${start.time} – ${end.time}`;
 }
 
+/*
+ * A calendar date, not an instant.
+ *
+ * activities.occurred_on is a plain DATE and the API sends it as
+ * 'YYYY-MM-DD'. It must be formatted without any timezone conversion:
+ * `new Date('2026-09-05')` parses as UTC midnight, so rendering it in
+ * Atlanta time would display September 4. Reading the parts and formatting
+ * in UTC keeps the day shown equal to the day stored, for every viewer.
+ *
+ * This is deliberately separate from the TZ-converting formatters above,
+ * which handle genuinely timed values (an opportunity's starts_at/ends_at).
+ */
+export function formatCalendarDate(value, options = { month: 'short', day: 'numeric' }) {
+  if (!value) return null;
+  const [year, month, day] = String(value).slice(0, 10).split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString('en-US', {
+    ...options,
+    timeZone: 'UTC',
+  });
+}
+
 export function formatLocation(location) {
   if (!location) return null;
   if (location.isOnline) return 'Online';

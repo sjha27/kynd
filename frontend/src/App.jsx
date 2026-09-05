@@ -3,6 +3,7 @@ import AppShell from './components/layout/AppShell';
 import Home from './routes/Home';
 import Discover from './routes/Discover';
 import Create from './routes/Create';
+import LogActivity from './routes/LogActivity';
 import Activity from './routes/Activity';
 import Profile from './routes/Profile';
 import OpportunityDetail from './routes/OpportunityDetail';
@@ -20,6 +21,7 @@ function App() {
         <Route path="/users/:id" element={<UserProfile />} />
         <Route path="/organizations/:id" element={<OrganizationDetail />} />
         <Route path="/create" element={<Create />} />
+        <Route path="/create/log" element={<LogActivity />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/dev/status" element={<DevStatus />} />
