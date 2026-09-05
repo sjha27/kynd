@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
-import { ArrowLeft, MapPin, Clock, CalendarDays, Users, BadgeCheck } from 'lucide-react';
-import { fetchOpportunity } from '../api/client';
+import { ArrowLeft, MapPin, Clock, CalendarDays, Users, BadgeCheck, Check } from 'lucide-react';
+import { fetchOpportunity, joinOpportunity } from '../api/client';
 import Photo from '../components/ui/Photo';
 import Avatar from '../components/ui/Avatar';
 import OrgMark from '../components/ui/OrgMark';
 import Skeleton, { SkeletonText } from '../components/ui/Skeleton';
 import ErrorState from '../components/ui/ErrorState';
+import Button from '../components/ui/Button';
 import { opportunityImage, avatarImage } from '../lib/media';
 import { causeColor } from '../lib/causes';
 import { formatDayRange, formatDuration, formatLocation, isScarce } from '../lib/format';
@@ -99,6 +100,77 @@ function Prose({ title, body }) {
       <h2 className="text-[17px] font-bold tracking-[-0.01em] text-ink">{title}</h2>
       <p className="mt-2 whitespace-pre-line text-[15px] leading-relaxed text-ink-muted">{body}</p>
     </section>
+  );
+}
+
+/*
+ * The Join control.
+ *
+ * Everything it shows comes from backend state: `viewerJoined` and the
+ * participant counts are re-read on every load, so Joined survives a refresh
+ * and a navigate-away rather than living in React state. The optimistic-
+ * looking update after a successful join just applies the numbers the server
+ * returned — it never invents them.
+ */
+function JoinAction({ opportunity, past, onJoined }) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState(null);
+
+  const joined = opportunity.viewerJoined;
+  const full = opportunity.participants.available === 0;
+
+  const join = async () => {
+    if (pending) return; // guards double clicks while in flight
+    setPending(true);
+    setError(null);
+    try {
+      onJoined(await joinOpportunity(opportunity.id));
+    } catch (err) {
+      setError(
+        err.code === 'opportunity_full'
+          ? 'This opportunity just filled up.'
+          : err.code === 'opportunity_not_joinable'
+            ? 'This opportunity is no longer open to join.'
+            : "We couldn't complete that. Please try again."
+      );
+    } finally {
+      setPending(false);
+    }
+  };
+
+  if (past) {
+    return (
+      <div className="mt-6 rounded-2xl border border-line bg-surface-sunken px-5 py-4">
+        <p className="text-[14px] text-ink-muted">This opportunity has already taken place.</p>
+      </div>
+    );
+  }
+
+  if (joined) {
+    return (
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <span className="inline-flex items-center gap-2 rounded-control bg-cause-sage px-4 py-2.5 text-sm font-semibold text-white">
+          <Check className="h-4 w-4" strokeWidth={2.6} aria-hidden="true" />
+          Joined
+        </span>
+        <Link to="/activity" className="text-[14px] font-semibold text-brand underline">
+          See it in Activity
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6">
+      <Button onClick={join} disabled={pending || full} className="min-w-[140px]">
+        {pending ? 'Joining…' : full ? 'Full' : 'Join'}
+      </Button>
+      {error && (
+        <p role="alert" className="mt-2 text-[14px] text-accent">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -240,18 +312,24 @@ function OpportunityDetail() {
           </p>
         )}
 
-        {/*
-          Reserved space for Join. Intentionally not a button: Join is its own
-          vertical slice, and a control that only changed local text would be
-          a lie about what the product does.
-        */}
-        <div className="mt-6 rounded-2xl border border-dashed border-line-strong px-5 py-4">
-          <p className="text-[14px] text-ink-muted">
-            {past
-              ? 'This opportunity has already taken place.'
-              : 'Joining opens in the next build.'}
-          </p>
-        </div>
+        <JoinAction
+          opportunity={o}
+          past={past}
+          onJoined={(result) =>
+            setState((prev) => ({
+              ...prev,
+              opportunity: {
+                ...prev.opportunity,
+                viewerJoined: true,
+                participants: {
+                  ...prev.opportunity.participants,
+                  joined: result.participantCount,
+                  available: result.availableSpots,
+                },
+              },
+            }))
+          }
+        />
 
         {participants.preview.length > 0 && (
           <section className="mt-8 border-t border-line pt-6">

@@ -10,6 +10,7 @@ const opportunitiesRouter = require('./routes/opportunities');
 const usersRouter = require('./routes/users');
 const organizationsRouter = require('./routes/organizations');
 const demoSessionsRouter = require('./routes/demo_sessions');
+const activityRouter = require('./routes/activity');
 const { notFoundHandler, errorHandler } = require('./middleware/errors');
 const { SESSION_HEADER } = require('./middleware/session');
 
@@ -56,6 +57,7 @@ function createApp() {
 
   app.use('/api/v1/demo-sessions', demoSessionsRouter);
   app.use('/api/v1/opportunities', opportunitiesRouter);
+  app.use('/api/v1/activity', activityRouter);
   app.use('/api/v1/users', usersRouter);
   app.use('/api/v1/organizations', organizationsRouter);
 

@@ -247,8 +247,12 @@ describe('demo sessions', () => {
         return;
       }
 
+      // The full approved write surface after the Join slice. registrations
+      // has INSERT (new join) and UPDATE (reactivate a cancelled one) but
+      // deliberately no DELETE or TRUNCATE — Join never removes history.
       expect(writable).toEqual({
         demo_sessions: ['DELETE', 'INSERT'],
+        registrations: ['INSERT', 'UPDATE'],
         users: ['INSERT'],
       });
     });

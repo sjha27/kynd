@@ -5,12 +5,15 @@ const opportunitiesService = require('../services/opportunities');
 const { parseUuidParam } = require('../lib/uuid');
 const { parsePaginationParams } = require('../lib/pagination');
 const { parseDiscoveryParams } = require('../lib/discovery');
+const { requireDemoSession, optionalDemoSession } = require('../middleware/session');
 
 const router = express.Router();
 
-// Read-only. Discover does not write; registrations/saves arrive with their
-// own vertical slices.
-router.get('/', async (req, res, next) => {
+/*
+ * Reads are session-optional: they work anonymously (seeded world only) and
+ * gain the current visitor's own state when a session is present.
+ */
+router.get('/', optionalDemoSession(), async (req, res, next) => {
   try {
     const { limit, offset } = parsePaginationParams(req.query);
     const filters = parseDiscoveryParams(req.query);
@@ -18,13 +21,12 @@ router.get('/', async (req, res, next) => {
     const { opportunities, total } = await opportunitiesService.listOpportunities({
       limit,
       offset,
+      sessionId: req.demo?.sessionId ?? null,
       ...filters,
     });
 
     res.json({
       opportunities,
-      // Echoing the applied filters back lets the UI render active-filter
-      // chips from the server's interpretation rather than its own guess.
       page: { limit, offset, total },
       filters,
     });
@@ -33,11 +35,33 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', optionalDemoSession(), async (req, res, next) => {
   try {
     const id = parseUuidParam(req.params.id, 'opportunity id');
-    const opportunity = await opportunitiesService.getOpportunityDetail(id);
+    const opportunity = await opportunitiesService.getOpportunityDetail(
+      id,
+      req.demo?.sessionId ?? null
+    );
     res.json({ opportunity });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/*
+ * Join requires a real session. The acting user is taken from the resolved
+ * session — the body is not read at all, so a caller cannot join as someone
+ * else or nominate a participant.
+ */
+router.post('/:id/join', requireDemoSession(), async (req, res, next) => {
+  try {
+    const id = parseUuidParam(req.params.id, 'opportunity id');
+    const result = await opportunitiesService.joinOpportunity({
+      opportunityId: id,
+      sessionId: req.demo.sessionId,
+      userId: req.demo.user.id,
+    });
+    res.status(200).json(result);
   } catch (err) {
     next(err);
   }

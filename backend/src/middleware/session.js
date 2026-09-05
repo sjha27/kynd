@@ -41,4 +41,27 @@ function requireDemoSession() {
   };
 }
 
-module.exports = { requireDemoSession, SESSION_HEADER };
+/*
+ * For public reads that work with or without a visitor.
+ *
+ *   no header      -> req.demo stays null; the read shows the seeded world
+ *   valid header   -> req.demo resolved; the read shows seeded + this visitor
+ *   invalid header -> 401, same as requireDemoSession
+ *
+ * The last case matters: a stale or expired header is NOT silently downgraded
+ * to anonymous. Doing so would quietly show a visitor 5/20 after they joined,
+ * which reads as data loss. Failing loudly lets the client re-bootstrap.
+ */
+function optionalDemoSession() {
+  const resolve = requireDemoSession();
+  return function optionalDemoSessionMiddleware(req, res, next) {
+    if (req.get(SESSION_HEADER) === undefined) {
+      req.demo = null;
+      next();
+      return;
+    }
+    resolve(req, res, next);
+  };
+}
+
+module.exports = { requireDemoSession, optionalDemoSession, SESSION_HEADER };

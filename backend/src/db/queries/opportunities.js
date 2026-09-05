@@ -1,10 +1,22 @@
 'use strict';
 
-const { query } = require('../pool');
+const crypto = require('node:crypto');
+
+const { pool, query } = require('../pool');
 const {
   LOCAL_TIMEZONE,
   COMMITMENT_BANDS,
 } = require('../../lib/discovery');
+const { visibleUserPredicate, visibleJoinedCountSql } = require('../visibility');
+
+/*
+ * All opportunity reads are session-scoped.
+ *
+ * `$1` is always the current demo session id, or NULL for an anonymous read.
+ * Binding it unconditionally keeps one query shape for both cases (see
+ * db/visibility.js), so filter parameters always start at $2.
+ */
+const SESSION_PARAM = '$1';
 
 const OPPORTUNITY_SELECT = `
   SELECT
@@ -32,11 +44,17 @@ const OPPORTUNITY_SELECT = `
     ho.name AS host_organization_name,
     ho.logo_url AS host_organization_logo_url,
     ho.is_verified_demo AS host_organization_verified,
-    (
-      SELECT COUNT(*)::int
-      FROM registrations r
-      WHERE r.opportunity_id = o.id AND r.status = 'joined'
-    ) AS joined_count
+    ${visibleJoinedCountSql('o.id', SESSION_PARAM)} AS joined_count,
+    -- Whether THIS viewer is joined. Derived on the server, which knows the
+    -- session user; the browser must never infer it from participant counts.
+    EXISTS (
+      SELECT 1
+      FROM registrations vrr
+      JOIN users vru ON vru.id = vrr.user_id
+      WHERE vrr.opportunity_id = o.id
+        AND vrr.status = 'joined'
+        AND vru.demo_session_id = ${SESSION_PARAM}
+    ) AS viewer_joined
   FROM opportunities o
   JOIN causes c ON c.id = o.cause_id
   LEFT JOIN users hu ON hu.id = o.host_user_id
@@ -149,8 +167,9 @@ function buildOrderBy(sort) {
   return `ORDER BY starts_at ASC, id ASC`;
 }
 
-async function searchOpportunities({ limit, offset, ...filters }) {
-  const params = [];
+async function searchOpportunities({ limit, offset, sessionId = null, ...filters }) {
+  // Session id is always $1 (see SESSION_PARAM); filters bind from $2.
+  const params = [sessionId];
   const clauses = buildFilters(filters, params);
 
   params.push(limit);
@@ -176,8 +195,8 @@ async function searchOpportunities({ limit, offset, ...filters }) {
   };
 }
 
-async function findOpportunityById(id) {
-  const { rows } = await query(`${OPPORTUNITY_SELECT} WHERE o.id = $1`, [id]);
+async function findOpportunityById(id, sessionId = null) {
+  const { rows } = await query(`${OPPORTUNITY_SELECT} WHERE o.id = $2`, [sessionId, id]);
   return rows[0] || null;
 }
 
@@ -186,22 +205,22 @@ async function findOpportunityById(id) {
  * Ordered deterministically so the same opportunity always previews the
  * same people.
  */
-async function findAttendeePreview(opportunityId, previewLimit) {
+async function findAttendeePreview(opportunityId, previewLimit, sessionId = null) {
   const { rows } = await query(
     `SELECT u.id, u.display_name, u.avatar_url
      FROM registrations r
      JOIN users u ON u.id = r.user_id
-     WHERE r.opportunity_id = $1
+     WHERE r.opportunity_id = $2
        AND r.status = 'joined'
-       AND u.demo_session_id IS NULL
+       AND ${visibleUserPredicate('u', SESSION_PARAM)}
      ORDER BY u.display_name ASC, u.id ASC
-     LIMIT $2`,
-    [opportunityId, previewLimit]
+     LIMIT $3`,
+    [sessionId, opportunityId, previewLimit]
   );
   return rows;
 }
 
-async function findAttendeePreviewsFor(opportunityIds, previewLimit) {
+async function findAttendeePreviewsFor(opportunityIds, previewLimit, sessionId = null) {
   if (opportunityIds.length === 0) return new Map();
 
   // One round trip for the whole page of cards: rank each opportunity's
@@ -220,12 +239,12 @@ async function findAttendeePreviewsFor(opportunityIds, previewLimit) {
          ) AS rn
        FROM registrations r
        JOIN users u ON u.id = r.user_id
-       WHERE r.opportunity_id = ANY($1::uuid[])
+       WHERE r.opportunity_id = ANY($2::uuid[])
          AND r.status = 'joined'
-         AND u.demo_session_id IS NULL
+         AND ${visibleUserPredicate('u', SESSION_PARAM)}
      ) ranked
-     WHERE rn <= $2`,
-    [opportunityIds, previewLimit]
+     WHERE rn <= $3`,
+    [sessionId, opportunityIds, previewLimit]
   );
 
   const byOpportunity = new Map();
@@ -238,9 +257,145 @@ async function findAttendeePreviewsFor(opportunityIds, previewLimit) {
   return byOpportunity;
 }
 
+/*
+ * Joins an opportunity for one temporary user, inside a transaction.
+ *
+ * Concurrency is handled by the schema's UNIQUE (user_id, opportunity_id)
+ * rather than by application locking: a single INSERT ... ON CONFLICT DO
+ * UPDATE collapses all three cases into one atomic statement —
+ *
+ *   no registration       -> INSERT  status 'joined'
+ *   cancelled registration-> UPDATE  reactivates the SAME row (no duplicate
+ *                                    history), clearing cancelled_at
+ *   already joined        -> UPDATE  that changes nothing meaningful
+ *
+ * The joined_at CASE preserves the original timestamp for an already-joined
+ * row, so a double click or retry is genuinely idempotent instead of
+ * silently resetting when the visitor joined.
+ *
+ * Capacity is re-checked inside the transaction against the viewer's VISIBLE
+ * count, so the number the visitor was shown is the number enforced. The row
+ * lock on the opportunity serializes concurrent joins from the same session.
+ */
+async function joinOpportunity({ opportunityId, userId, sessionId }) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    /*
+     * Deliberately no SELECT ... FOR UPDATE here.
+     *
+     * Two reasons. Practically, row locking would require UPDATE privilege on
+     * opportunities, which the restricted runtime role must never hold — the
+     * role is read-only on the seeded marketplace.
+     *
+     * More importantly it is not needed. Capacity is evaluated per visitor,
+     * and each visitor sees only the seeded world plus themselves, so one
+     * session's join can never affect another's count. Within a single
+     * session the UNIQUE (user_id, opportunity_id) constraint means a visitor
+     * can hold at most one registration, so concurrent double-clicks converge
+     * on the same row and cannot consume two spots. The uniqueness constraint
+     * is the serialization point, not a lock.
+     */
+    const opportunity = await client.query(
+      `SELECT id, capacity, status, starts_at FROM opportunities WHERE id = $1`,
+      [opportunityId]
+    );
+    if (opportunity.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return { outcome: 'not_found' };
+    }
+
+    const row = opportunity.rows[0];
+    if (row.status !== 'published') {
+      await client.query('ROLLBACK');
+      return { outcome: 'not_joinable' };
+    }
+
+    // Real wall-clock time — the synthetic WORLD_REFERENCE_DATE governs the
+    // seeded world, never runtime behavior.
+    const timing = await client.query(`SELECT $1::timestamptz > now() AS upcoming`, [row.starts_at]);
+    if (!timing.rows[0].upcoming) {
+      await client.query('ROLLBACK');
+      return { outcome: 'not_joinable' };
+    }
+
+    const already = await client.query(
+      `SELECT status FROM registrations WHERE user_id = $1 AND opportunity_id = $2`,
+      [userId, opportunityId]
+    );
+    const alreadyJoined = already.rows[0]?.status === 'joined';
+
+    // Only a genuinely new join consumes a spot; re-joining an existing
+    // joined registration must never be blocked by a full opportunity.
+    if (!alreadyJoined) {
+      const visible = await client.query(
+        `SELECT ${visibleJoinedCountSql('$1', '$2')} AS joined_count`,
+        [opportunityId, sessionId]
+      );
+      if (visible.rows[0].joined_count >= row.capacity) {
+        await client.query('ROLLBACK');
+        return { outcome: 'full', capacity: row.capacity };
+      }
+    }
+
+    await client.query(
+      `INSERT INTO registrations (id, user_id, opportunity_id, status, joined_at, cancelled_at)
+       VALUES ($1, $2, $3, 'joined', now(), NULL)
+       ON CONFLICT (user_id, opportunity_id) DO UPDATE
+         SET status = 'joined',
+             cancelled_at = NULL,
+             joined_at = CASE
+               WHEN registrations.status = 'cancelled' THEN now()
+               ELSE registrations.joined_at
+             END`,
+      [crypto.randomUUID(), userId, opportunityId]
+    );
+
+    const after = await client.query(
+      `SELECT ${visibleJoinedCountSql('$1', '$2')} AS joined_count`,
+      [opportunityId, sessionId]
+    );
+
+    await client.query('COMMIT');
+    return {
+      outcome: 'joined',
+      capacity: row.capacity,
+      joinedCount: after.rows[0].joined_count,
+      alreadyJoined,
+    };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/*
+ * The current visitor's upcoming joined opportunities.
+ *
+ * Scoped by session rather than by user id alone, so a caller cannot pass
+ * another visitor's user id and read their Activity.
+ */
+async function findUpcomingForSession(sessionId, limit = 50) {
+  const { rows } = await query(
+    `${OPPORTUNITY_SELECT}
+     JOIN registrations r ON r.opportunity_id = o.id AND r.status = 'joined'
+     JOIN users ru ON ru.id = r.user_id AND ru.demo_session_id = ${SESSION_PARAM}
+     WHERE o.status = 'published' AND o.starts_at > now()
+     ORDER BY o.starts_at ASC, o.id ASC
+     LIMIT $2`,
+    [sessionId, limit]
+  );
+  return rows;
+}
+
 module.exports = {
   searchOpportunities,
   findOpportunityById,
+  joinOpportunity,
+  findUpcomingForSession,
   findAttendeePreview,
   findAttendeePreviewsFor,
 };

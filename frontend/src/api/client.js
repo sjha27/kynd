@@ -84,6 +84,15 @@ function fetchOpportunity(id, options) {
   return apiGet(`/api/v1/opportunities/${id}`, options);
 }
 
+// Join takes no body: the backend derives the acting user from the session.
+function joinOpportunity(id, options) {
+  return apiPost(`/api/v1/opportunities/${id}/join`, options);
+}
+
+function fetchActivity(options) {
+  return apiGet('/api/v1/activity', options);
+}
+
 function createDemoSession(options) {
   return apiPost('/api/v1/demo-sessions', options);
 }
@@ -98,6 +107,8 @@ export {
   buildQuery,
   fetchOpportunities,
   fetchOpportunity,
+  joinOpportunity,
+  fetchActivity,
   createDemoSession,
   fetchCurrentDemoSession,
   SESSION_HEADER,

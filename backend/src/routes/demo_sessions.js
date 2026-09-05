@@ -24,6 +24,10 @@ const createSessionLimiter = rateLimit({
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { error: { message: 'Too many demo sessions created. Try again later.' } },
+  // The suite legitimately creates many sessions from one address to prove
+  // isolation. Skipping under NODE_ENV=test keeps the production limit intact
+  // while letting those tests exercise the real routes.
+  skip: () => process.env.NODE_ENV === 'test',
 });
 
 // Creating a session is the one route that must NOT require a session.

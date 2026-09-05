@@ -1,7 +1,7 @@
 'use strict';
 
 const opportunitiesQueries = require('../db/queries/opportunities');
-const { NotFoundError } = require('../errors');
+const { NotFoundError, ConflictError } = require('../errors');
 const { COMMITMENT_BANDS } = require('../lib/discovery');
 
 const CARD_ATTENDEE_PREVIEW = 3;
@@ -76,6 +76,9 @@ function toProductOpportunity(row, { attendees = [] } = {}) {
           state: row.state,
         },
     capacity: row.capacity,
+    // True only when THIS viewer holds a joined registration. Derived on the
+    // server from the session; never inferred in the browser.
+    viewerJoined: row.viewer_joined === true,
     participants: {
       joined,
       available,
@@ -88,16 +91,18 @@ function toProductOpportunity(row, { attendees = [] } = {}) {
   };
 }
 
-async function listOpportunities({ limit = 20, offset = 0, ...filters } = {}) {
+async function listOpportunities({ limit = 20, offset = 0, sessionId = null, ...filters } = {}) {
   const { rows, total } = await opportunitiesQueries.searchOpportunities({
     limit,
     offset,
+    sessionId,
     ...filters,
   });
 
   const previews = await opportunitiesQueries.findAttendeePreviewsFor(
     rows.map((row) => row.id),
-    CARD_ATTENDEE_PREVIEW
+    CARD_ATTENDEE_PREVIEW,
+    sessionId
   );
 
   return {
@@ -108,21 +113,69 @@ async function listOpportunities({ limit = 20, offset = 0, ...filters } = {}) {
   };
 }
 
-async function getOpportunityDetail(id) {
-  const row = await opportunitiesQueries.findOpportunityById(id);
+async function getOpportunityDetail(id, sessionId = null) {
+  const row = await opportunitiesQueries.findOpportunityById(id, sessionId);
   if (!row) {
     throw new NotFoundError('Opportunity not found');
   }
   const attendees = await opportunitiesQueries.findAttendeePreview(
     id,
-    DETAIL_ATTENDEE_PREVIEW
+    DETAIL_ATTENDEE_PREVIEW,
+    sessionId
   );
   return toProductOpportunity(row, { attendees });
+}
+
+/*
+ * Join, as a product operation.
+ *
+ * The caller supplies only the opportunity; the acting user comes from the
+ * resolved session, so a request can never join on someone else's behalf.
+ */
+async function joinOpportunity({ opportunityId, sessionId, userId }) {
+  const result = await opportunitiesQueries.joinOpportunity({
+    opportunityId,
+    userId,
+    sessionId,
+  });
+
+  if (result.outcome === 'not_found') {
+    throw new NotFoundError('Opportunity not found');
+  }
+  if (result.outcome === 'not_joinable') {
+    throw new ConflictError('This opportunity is no longer open to join.', 'opportunity_not_joinable');
+  }
+  if (result.outcome === 'full') {
+    throw new ConflictError('This opportunity is full.', 'opportunity_full');
+  }
+
+  return {
+    joined: true,
+    capacity: result.capacity,
+    participantCount: result.joinedCount,
+    availableSpots: Math.max(result.capacity - result.joinedCount, 0),
+  };
+}
+
+// The visitor's own upcoming joined opportunities, shaped like the cards
+// Discover already renders so Activity can reuse them.
+async function listUpcomingForSession(sessionId) {
+  const rows = await opportunitiesQueries.findUpcomingForSession(sessionId);
+  const previews = await opportunitiesQueries.findAttendeePreviewsFor(
+    rows.map((row) => row.id),
+    CARD_ATTENDEE_PREVIEW,
+    sessionId
+  );
+  return rows.map((row) =>
+    toProductOpportunity(row, { attendees: previews.get(row.id) || [] })
+  );
 }
 
 module.exports = {
   listOpportunities,
   getOpportunityDetail,
+  joinOpportunity,
+  listUpcomingForSession,
   commitmentBand,
   durationMinutes,
 };

@@ -20,6 +20,18 @@ class NotFoundError extends ApiError {
 }
 
 /*
+ * A request that is well-formed but cannot be satisfied in the current state
+ * of the world — a full opportunity, or one that has been cancelled or has
+ * already started. The `code` lets the UI show the right message.
+ */
+class ConflictError extends ApiError {
+  constructor(message, code) {
+    super(409, message);
+    this.code = code;
+  }
+}
+
+/*
  * Used when a demo session is missing, malformed, unknown, or expired.
  *
  * All four cases deliberately return the same 401 shape so the endpoint can
@@ -34,4 +46,4 @@ class SessionError extends ApiError {
   }
 }
 
-module.exports = { ApiError, ValidationError, NotFoundError, SessionError };
+module.exports = { ApiError, ValidationError, NotFoundError, ConflictError, SessionError };
