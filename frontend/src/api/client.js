@@ -105,6 +105,10 @@ function fetchActivity(options) {
   return apiGet('/api/v1/activity', options);
 }
 
+function fetchHome(options) {
+  return apiGet('/api/v1/home', options);
+}
+
 function fetchUserProfile(id, options) {
   return apiGet(`/api/v1/users/${id}/profile`, options);
 }
@@ -148,6 +152,7 @@ export {
   fetchOpportunity,
   joinOpportunity,
   fetchActivity,
+  fetchHome,
   createDemoSession,
   fetchCurrentDemoSession,
   fetchUserProfile,
