@@ -9,7 +9,11 @@ function notFoundHandler(req, res) {
 // eslint-disable-next-line no-unused-vars
 function errorHandler(err, req, res, next) {
   if (err instanceof ApiError) {
-    res.status(err.statusCode).json({ error: { message: err.message } });
+    const body = { error: { message: err.message } };
+    // Machine-readable hint (e.g. demo_session_invalid) so the client can act
+    // on the outcome without parsing prose.
+    if (err.code) body.error.code = err.code;
+    res.status(err.statusCode).json(body);
     return;
   }
 

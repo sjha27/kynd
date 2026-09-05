@@ -7,19 +7,60 @@
 // Production: Cloudflare Pages sets VITE_API_BASE_URL to the deployed
 // Render API origin (e.g. https://api.kynd.shreyashjha.com), and requests
 // go straight there.
+import { readStoredSessionId } from '../session/demoSession';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
+const SESSION_HEADER = 'X-Kynd-Session-Id';
+
+/*
+ * The single place the demo-session header is attached.
+ *
+ * Read at request time rather than captured once, so a session created or
+ * replaced after module load is picked up without re-wiring anything. Every
+ * future session-aware feature gets the header for free; none of them should
+ * set it themselves.
+ */
+function withSessionHeader(headers = {}) {
+  const sessionId = readStoredSessionId();
+  return sessionId ? { ...headers, [SESSION_HEADER]: sessionId } : headers;
+}
+
+// Errors carry the backend's machine-readable code (e.g. demo_session_invalid)
+// so callers can branch on it without matching prose.
+function apiError(response, body) {
+  const message =
+    (body && body.error && body.error.message) ||
+    `Request failed with status ${response.status}`;
+  const error = new Error(message);
+  error.status = response.status;
+  error.code = body && body.error && body.error.code;
+  return error;
+}
+
 async function apiGet(path, { signal } = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, { signal });
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    signal,
+    headers: withSessionHeader(),
+  });
   const body = await response.json().catch(() => null);
 
-  if (!response.ok) {
-    const message =
-      (body && body.error && body.error.message) ||
-      `Request failed with status ${response.status}`;
-    throw new Error(message);
-  }
+  if (!response.ok) throw apiError(response, body);
+  return body;
+}
 
+async function apiPost(path, { signal, body: payload } = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    signal,
+    headers: withSessionHeader(
+      payload === undefined ? {} : { 'Content-Type': 'application/json' }
+    ),
+    body: payload === undefined ? undefined : JSON.stringify(payload),
+  });
+  const body = await response.json().catch(() => null);
+
+  if (!response.ok) throw apiError(response, body);
   return body;
 }
 
@@ -43,4 +84,21 @@ function fetchOpportunity(id, options) {
   return apiGet(`/api/v1/opportunities/${id}`, options);
 }
 
-export { apiGet, buildQuery, fetchOpportunities, fetchOpportunity };
+function createDemoSession(options) {
+  return apiPost('/api/v1/demo-sessions', options);
+}
+
+function fetchCurrentDemoSession(options) {
+  return apiGet('/api/v1/demo-sessions/current', options);
+}
+
+export {
+  apiGet,
+  apiPost,
+  buildQuery,
+  fetchOpportunities,
+  fetchOpportunity,
+  createDemoSession,
+  fetchCurrentDemoSession,
+  SESSION_HEADER,
+};

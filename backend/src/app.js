@@ -9,14 +9,29 @@ const { pool } = require('./db/pool');
 const opportunitiesRouter = require('./routes/opportunities');
 const usersRouter = require('./routes/users');
 const organizationsRouter = require('./routes/organizations');
+const demoSessionsRouter = require('./routes/demo_sessions');
 const { notFoundHandler, errorHandler } = require('./middleware/errors');
+const { SESSION_HEADER } = require('./middleware/session');
 
 function createApp() {
   const env = loadEnv();
   const app = express();
 
+  // Render terminates TLS and forwards one hop, so the client IP arrives in
+  // X-Forwarded-For. Without this the rate limiter would bucket every visitor
+  // under the proxy's address. Scoped to a single hop rather than `true`,
+  // which would let a client spoof its own IP through the header.
+  app.set('trust proxy', 1);
+
   app.use(helmet());
-  app.use(cors({ origin: env.clientOrigin }));
+  app.use(
+    cors({
+      origin: env.clientOrigin,
+      // The browser cannot send X-Kynd-Session-Id cross-origin unless it is
+      // named here. No credentials: Kynd uses no cookies.
+      allowedHeaders: ['Content-Type', SESSION_HEADER],
+    })
+  );
   app.use(express.json());
 
   // Infrastructure: proves Express itself is alive without touching the
@@ -39,6 +54,7 @@ function createApp() {
     }
   });
 
+  app.use('/api/v1/demo-sessions', demoSessionsRouter);
   app.use('/api/v1/opportunities', opportunitiesRouter);
   app.use('/api/v1/users', usersRouter);
   app.use('/api/v1/organizations', organizationsRouter);
