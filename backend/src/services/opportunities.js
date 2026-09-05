@@ -3,6 +3,7 @@
 const opportunitiesQueries = require('../db/queries/opportunities');
 const { NotFoundError, ConflictError } = require('../errors');
 const { COMMITMENT_BANDS } = require('../lib/discovery');
+const { DEMO_COMPLETABLE_OPPORTUNITY_IDS } = require('../config/demo_completion');
 
 const CARD_ATTENDEE_PREVIEW = 3;
 const DETAIL_ATTENDEE_PREVIEW = 8;
@@ -79,6 +80,11 @@ function toProductOpportunity(row, { attendees = [] } = {}) {
     // True only when THIS viewer holds a joined registration. Derived on the
     // server from the session; never inferred in the browser.
     viewerJoined: row.viewer_joined === true,
+    // The single source of truth for "does this opportunity get the
+    // early demo-completion path" — the allowlist itself lives only in
+    // config/demo_completion.js. The frontend must read this field rather
+    // than re-deriving or duplicating the allowlist.
+    demoCompletionEligible: DEMO_COMPLETABLE_OPPORTUNITY_IDS.includes(row.id),
     participants: {
       joined,
       available,
@@ -171,11 +177,27 @@ async function listUpcomingForSession(sessionId) {
   );
 }
 
+// Joined, ended, not-yet-completed opportunities — the normal
+// "Did you participate?" state, reachable independently of the demo-only
+// early flagship path.
+async function listAwaitingConfirmationForSession(sessionId) {
+  const rows = await opportunitiesQueries.findAwaitingConfirmationForSession(sessionId);
+  const previews = await opportunitiesQueries.findAttendeePreviewsFor(
+    rows.map((row) => row.id),
+    CARD_ATTENDEE_PREVIEW,
+    sessionId
+  );
+  return rows.map((row) =>
+    toProductOpportunity(row, { attendees: previews.get(row.id) || [] })
+  );
+}
+
 module.exports = {
   listOpportunities,
   getOpportunityDetail,
   joinOpportunity,
   listUpcomingForSession,
+  listAwaitingConfirmationForSession,
   commitmentBand,
   durationMinutes,
 };

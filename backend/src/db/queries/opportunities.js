@@ -384,7 +384,34 @@ async function findUpcomingForSession(sessionId, limit = 50) {
      JOIN registrations r ON r.opportunity_id = o.id AND r.status = 'joined'
      JOIN users ru ON ru.id = r.user_id AND ru.demo_session_id = ${SESSION_PARAM}
      WHERE o.status = 'published' AND o.starts_at > now()
+       -- Once a registration has a completed activity, it moves to
+       -- Completed and must stop appearing here — this is the only rule
+       -- that matters for the demo-only early flagship completion, since
+       -- its starts_at is still in the future.
+       AND NOT EXISTS (SELECT 1 FROM activities a WHERE a.registration_id = r.id)
      ORDER BY o.starts_at ASC, o.id ASC
+     LIMIT $2`,
+    [sessionId, limit]
+  );
+  return rows;
+}
+
+/*
+ * Joined opportunities whose real end has already passed but which have
+ * not been completed yet — the "Did you participate?" state. Without this,
+ * such a registration falls into a gap: findUpcomingForSession excludes it
+ * (starts_at is no longer > now()) and Completed has nothing to show
+ * (no activity exists yet). Scoped by session, same rule as
+ * findUpcomingForSession.
+ */
+async function findAwaitingConfirmationForSession(sessionId, limit = 50) {
+  const { rows } = await query(
+    `${OPPORTUNITY_SELECT}
+     JOIN registrations r ON r.opportunity_id = o.id AND r.status = 'joined'
+     JOIN users ru ON ru.id = r.user_id AND ru.demo_session_id = ${SESSION_PARAM}
+     WHERE o.ends_at <= now()
+       AND NOT EXISTS (SELECT 1 FROM activities a WHERE a.registration_id = r.id)
+     ORDER BY o.ends_at DESC, o.id ASC
      LIMIT $2`,
     [sessionId, limit]
   );
@@ -396,6 +423,7 @@ module.exports = {
   findOpportunityById,
   joinOpportunity,
   findUpcomingForSession,
+  findAwaitingConfirmationForSession,
   findAttendeePreview,
   findAttendeePreviewsFor,
 };

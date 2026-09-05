@@ -2,6 +2,7 @@
 
 const express = require('express');
 const opportunitiesService = require('../services/opportunities');
+const activitiesService = require('../services/activities');
 const { requireDemoSession } = require('../middleware/session');
 
 const router = express.Router();
@@ -9,18 +10,27 @@ const router = express.Router();
 /*
  * The current visitor's Activity.
  *
- * Only `upcoming` is implemented in this slice. The response is shaped as an
- * object rather than a bare array so Completed and Saved can be added later
- * without changing the contract — but they are deliberately absent rather
- * than stubbed as empty arrays, which would claim behavior that doesn't exist.
+ * Upcoming and Completed are both real in this slice; Saved is still
+ * deliberately absent rather than stubbed as an empty array, which would
+ * claim behavior that doesn't exist.
+ *
+ * awaitingConfirmation is the normal "Did you participate?" state: a joined
+ * opportunity whose real end has passed but which has no activity yet. It
+ * would otherwise fall into a gap — excluded from `upcoming` (its starts_at
+ * is no longer in the future) and absent from `completed` (no activity
+ * exists) — with no reachable path back to completion.
  *
  * Always session-scoped: there is no way to ask for another visitor's
  * Activity, because the session is the only input.
  */
 router.get('/', requireDemoSession(), async (req, res, next) => {
   try {
-    const upcoming = await opportunitiesService.listUpcomingForSession(req.demo.sessionId);
-    res.json({ upcoming });
+    const [upcoming, completed, awaitingConfirmation] = await Promise.all([
+      opportunitiesService.listUpcomingForSession(req.demo.sessionId),
+      activitiesService.listCompletedForSession(req.demo.sessionId),
+      opportunitiesService.listAwaitingConfirmationForSession(req.demo.sessionId),
+    ]);
+    res.json({ upcoming, completed, awaitingConfirmation });
   } catch (err) {
     next(err);
   }

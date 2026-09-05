@@ -272,6 +272,10 @@ describe('demo sessions', () => {
         user_follows: ['DELETE', 'INSERT'],
         organization_follows: ['DELETE', 'INSERT'],
         user_causes: ['INSERT'],
+        // Completion INSERTs one row per registration; the UNIQUE
+        // constraint on activities.registration_id is what prevents
+        // duplicates, so there is never a reason to UPDATE or DELETE one.
+        activities: ['INSERT'],
       });
     });
   });

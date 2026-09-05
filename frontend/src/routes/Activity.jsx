@@ -7,57 +7,54 @@ import ErrorState from '../components/ui/ErrorState';
 import Button from '../components/ui/Button';
 import OpportunityCard from '../components/opportunity/OpportunityCard';
 import OpportunityCardSkeleton from '../components/opportunity/OpportunityCardSkeleton';
+import CompleteAction from '../components/activity/CompleteAction';
+import CompletedActivityCard from '../components/activity/CompletedActivityCard';
 import { fetchActivity } from '../api/client';
 
 /*
- * Activity's three tabs come from the product plan. Only Upcoming is backed
- * by real data in this slice; Completed and Saved stay honest placeholders
- * until their own slices rather than pretending to be empty results.
+ * Saved stays an honest placeholder until its own slice. Upcoming and
+ * Completed are both real now.
  */
-const TABS = [
-  { key: 'upcoming', label: 'Upcoming', icon: CalendarCheck },
-  {
-    key: 'completed',
-    label: 'Completed',
-    icon: History,
-    title: 'No history yet',
-    description:
-      'Once you take part in something, it becomes part of your history — the hours, the photos, and the story if you want to tell one.',
-  },
-  {
-    key: 'saved',
-    label: 'Saved',
-    icon: Bookmark,
-    title: 'Nothing saved',
-    description: 'Keep track of what you are considering and come back when you are ready.',
-  },
-];
+const SAVED_TAB = {
+  key: 'saved',
+  label: 'Saved',
+  icon: Bookmark,
+  title: 'Nothing saved',
+  description: 'Keep track of what you are considering and come back when you are ready.',
+};
 
 /*
- * The visitor's own upcoming joined opportunities.
- *
- * Everything here comes from the session's real registrations — nothing is
- * hard-coded, so this is empty until the visitor actually joins something.
+ * Shared load: both Upcoming and Completed come from the same endpoint, and
+ * completing an opportunity moves it from one list to the other, so a
+ * successful completion refetches both rather than mutating local state.
  */
-function Upcoming() {
-  const navigate = useNavigate();
-  const [state, setState] = useState({ status: 'loading', items: [] });
+const EMPTY_ACTIVITY = { upcoming: [], completed: [], awaitingConfirmation: [] };
+
+function useActivity() {
+  const [state, setState] = useState({ status: 'loading', ...EMPTY_ACTIVITY });
 
   const load = useCallback(() => {
     const controller = new AbortController();
     setState((prev) => ({ ...prev, status: 'loading' }));
 
     fetchActivity({ signal: controller.signal })
-      .then((body) => setState({ status: 'ready', items: body.upcoming }))
+      .then((body) =>
+        setState({
+          status: 'ready',
+          upcoming: body.upcoming,
+          completed: body.completed,
+          awaitingConfirmation: body.awaitingConfirmation,
+        })
+      )
       .catch((err) => {
         if (err.name === 'AbortError') return;
         // A 401 means the session vanished; the provider will re-bootstrap on
         // the next load, so this reads as "nothing yet" rather than an error.
         if (err.status === 401) {
-          setState({ status: 'ready', items: [] });
+          setState({ status: 'ready', ...EMPTY_ACTIVITY });
           return;
         }
-        setState({ status: 'error', items: [] });
+        setState({ status: 'error', ...EMPTY_ACTIVITY });
       });
 
     return () => controller.abort();
@@ -65,7 +62,13 @@ function Upcoming() {
 
   useEffect(load, [load]);
 
-  if (state.status === 'loading' && state.items.length === 0) {
+  return { state, reload: load };
+}
+
+function Upcoming({ items, awaitingConfirmation, status, onReload }) {
+  const navigate = useNavigate();
+
+  if (status === 'loading' && items.length === 0 && awaitingConfirmation.length === 0) {
     return (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {Array.from({ length: 2 }).map((_, i) => (
@@ -75,17 +78,17 @@ function Upcoming() {
     );
   }
 
-  if (state.status === 'error') {
+  if (status === 'error') {
     return (
       <ErrorState
         title="We couldn't load your upcoming plans"
         description="The connection dropped or the service is waking up. Try again in a moment."
-        onRetry={load}
+        onRetry={onReload}
       />
     );
   }
 
-  if (state.items.length === 0) {
+  if (items.length === 0 && awaitingConfirmation.length === 0) {
     return (
       <EmptyState
         icon={CalendarCheck}
@@ -101,9 +104,73 @@ function Upcoming() {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      {state.items.map((opportunity) => (
-        <OpportunityCard key={opportunity.id} opportunity={opportunity} />
+    <div>
+      {/* The normal "Did you participate?" state: a joined opportunity
+          whose real end has already passed, with no activity yet. Kept
+          inside the existing Upcoming view rather than a new tab. */}
+      {awaitingConfirmation.length > 0 && (
+        <section className="mb-7">
+          <h2 className="text-[15px] font-bold text-ink">Did you participate?</h2>
+          <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {awaitingConfirmation.map((opportunity) => (
+              <div key={opportunity.id}>
+                <OpportunityCard opportunity={opportunity} />
+                <CompleteAction opportunity={opportunity} onCompleted={onReload} />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {items.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {items.map((opportunity) => (
+            <div key={opportunity.id}>
+              <OpportunityCard opportunity={opportunity} />
+              <CompleteAction opportunity={opportunity} onCompleted={onReload} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Completed({ items, status, onReload }) {
+  if (status === 'loading' && items.length === 0) {
+    return (
+      <div className="space-y-4">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <OpportunityCardSkeleton key={i} />
+        ))}
+      </div>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <ErrorState
+        title="We couldn't load your history"
+        description="The connection dropped or the service is waking up. Try again in a moment."
+        onRetry={onReload}
+      />
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <EmptyState
+        icon={History}
+        title="No history yet"
+        description="Once you take part in something, it becomes part of your history — the hours, the photos, and the story if you want to tell one."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {items.map((activity) => (
+        <CompletedActivityCard key={activity.id} activity={activity} />
       ))}
     </div>
   );
@@ -111,7 +178,13 @@ function Upcoming() {
 
 function Activity() {
   const [active, setActive] = useState('upcoming');
-  const tab = TABS.find((t) => t.key === active);
+  const { state, reload } = useActivity();
+
+  const TABS = [
+    { key: 'upcoming', label: 'Upcoming', icon: CalendarCheck },
+    { key: 'completed', label: 'Completed', icon: History },
+    SAVED_TAB,
+  ];
 
   return (
     <PageContainer width="narrow">
@@ -140,10 +213,19 @@ function Activity() {
       </div>
 
       <div role="tabpanel" className="mt-7">
-        {active === 'upcoming' ? (
-          <Upcoming />
-        ) : (
-          <EmptyState icon={tab.icon} title={tab.title} description={tab.description} />
+        {active === 'upcoming' && (
+          <Upcoming
+            items={state.upcoming}
+            awaitingConfirmation={state.awaitingConfirmation}
+            status={state.status}
+            onReload={reload}
+          />
+        )}
+        {active === 'completed' && (
+          <Completed items={state.completed} status={state.status} onReload={reload} />
+        )}
+        {active === 'saved' && (
+          <EmptyState icon={SAVED_TAB.icon} title={SAVED_TAB.title} description={SAVED_TAB.description} />
         )}
       </div>
     </PageContainer>

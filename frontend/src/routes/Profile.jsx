@@ -1,48 +1,40 @@
-import { UserRound } from 'lucide-react';
 import PageContainer from '../components/layout/PageContainer';
-import Avatar from '../components/ui/Avatar';
-import Photo from '../components/ui/Photo';
-import EmptyState from '../components/ui/EmptyState';
+import Skeleton, { SkeletonText } from '../components/ui/Skeleton';
+import UserProfile from './UserProfile';
+import { useDemoSession } from '../session/DemoSessionProvider';
 
 /*
- * Profile is the identity surface. There is no authentication or demo
- * session yet, so there is no person to render.
- *
- * The cover-and-avatar composition is established because that hierarchy is
- * the durable part. The four objective metrics (hours, activities,
- * organizations, raised) are deliberately absent rather than shown as
- * placeholders — empty metric slots read as broken data, and the real
- * treatment belongs with the Profile slice and real values.
+ * Your own profile is the same UserProfile surface everyone else's profile
+ * uses (identity, causes, objective metrics, and — self-only — Impact
+ * History), just addressed by the current session's own user id instead of
+ * a route param. This is deliberately not a redesign of the shared
+ * component or of other people's profiles.
  */
-function Profile() {
+function ProfileSkeleton() {
   return (
-    <>
-      {/* No cover asset exists, so Photo renders its neutral panel rather
-          than a broken image or filler stock photography. */}
-      <Photo ratio="3/2" className="!aspect-[3/1] lg:!aspect-[4/1]" alt="" />
-
-      <PageContainer width="narrow" className="!pt-0">
-        <div className="-mt-11 lg:-mt-14">
-          <Avatar name={null} size="lg" className="ring-4 ring-surface lg:h-28 lg:w-28" />
+    <PageContainer width="narrow">
+      <div className="flex items-center gap-4">
+        <Skeleton className="h-20 w-20" rounded="full" />
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-3 w-24" />
         </div>
-
-        <h1 className="mt-4 text-[26px] font-bold tracking-[-0.02em] text-ink lg:text-[30px]">
-          Your profile
-        </h1>
-        <p className="mt-1.5 text-[16px] text-ink-muted">
-          Signing in isn&rsquo;t part of the demo yet.
-        </p>
-
-        <div className="mt-2 border-t border-line">
-          <EmptyState
-            icon={UserRound}
-            title="Your contribution history lives here"
-            description="The causes you show up for, the organizations you support, and the activities you take part in build a profile over time. Kynd keeps the record, never a score."
-          />
-        </div>
-      </PageContainer>
-    </>
+      </div>
+      <div className="mt-8">
+        <SkeletonText lines={3} />
+      </div>
+    </PageContainer>
   );
+}
+
+function Profile() {
+  const { status, session } = useDemoSession();
+
+  if (status !== 'ready' || !session?.user?.id) {
+    return <ProfileSkeleton />;
+  }
+
+  return <UserProfile id={session.user.id} />;
 }
 
 export default Profile;

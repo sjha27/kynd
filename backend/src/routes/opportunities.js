@@ -2,6 +2,7 @@
 
 const express = require('express');
 const opportunitiesService = require('../services/opportunities');
+const activitiesService = require('../services/activities');
 const { parseUuidParam } = require('../lib/uuid');
 const { parsePaginationParams } = require('../lib/pagination');
 const { parseDiscoveryParams } = require('../lib/discovery');
@@ -60,6 +61,29 @@ router.post('/:id/join', requireDemoSession(), async (req, res, next) => {
       opportunityId: id,
       sessionId: req.demo.sessionId,
       userId: req.demo.user.id,
+    });
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/*
+ * Completion reads hours/story from the body — the visitor's own input
+ * about their own participation, not a way to act as someone else. The
+ * acting user and opportunity ownership still come only from the session.
+ */
+router.post('/:id/complete', requireDemoSession(), async (req, res, next) => {
+  try {
+    const id = parseUuidParam(req.params.id, 'opportunity id');
+    const hours = Number(req.body?.hours);
+    const story = typeof req.body?.story === 'string' ? req.body.story.trim() || null : null;
+
+    const result = await activitiesService.completeOpportunity({
+      opportunityId: id,
+      userId: req.demo.user.id,
+      hours,
+      story,
     });
     res.status(200).json(result);
   } catch (err) {

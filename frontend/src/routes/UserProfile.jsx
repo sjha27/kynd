@@ -4,18 +4,22 @@ import PageContainer from '../components/layout/PageContainer';
 import Avatar from '../components/ui/Avatar';
 import Skeleton, { SkeletonText } from '../components/ui/Skeleton';
 import ErrorState from '../components/ui/ErrorState';
+import EmptyState from '../components/ui/EmptyState';
 import FollowAction from '../components/social/FollowAction';
-import { fetchUserProfile, followUser, unfollowUser } from '../api/client';
+import CompletedActivityCard from '../components/activity/CompletedActivityCard';
+import { fetchUserProfile, followUser, unfollowUser, fetchActivity } from '../api/client';
 import { causeColor } from '../lib/causes';
 import { avatarImage } from '../lib/media';
 import { useDemoSession } from '../session/DemoSessionProvider';
 
 /*
- * A bare public identity card, not the full Profile from the product plan.
- * It exists to make Follow/Following understandable: who this is, what they
- * care about, the objective metrics the backend already computes, and
- * whether the viewer follows them. Impact History, Stories, and an activity
- * timeline stay out of scope until the Profile slice.
+ * A bare public identity card, not the full Profile from the product plan —
+ * Stories and a full activity timeline stay out of scope until the Profile
+ * polish checkpoint. It exists to make Follow/Following understandable
+ * (identity, causes, objective metrics, viewer follow state) for ANY
+ * profile, plus a simple Impact History section for the viewer's OWN
+ * profile only (Completion needs somewhere to show its result) — other
+ * people's profiles are unchanged.
  */
 const METRICS = [
   { key: 'hours', label: 'Hours' },
@@ -48,8 +52,46 @@ function ProfileSkeleton() {
   );
 }
 
-function UserProfile() {
-  const { id } = useParams();
+function ImpactHistory() {
+  const [state, setState] = useState({ status: 'loading', items: [] });
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchActivity({ signal: controller.signal })
+      .then((body) => setState({ status: 'ready', items: body.completed }))
+      .catch((err) => {
+        if (err.name === 'AbortError') return;
+        setState({ status: 'error', items: [] });
+      });
+    return () => controller.abort();
+  }, []);
+
+  return (
+    <section className="mt-8 border-t border-line pt-6">
+      <h2 className="text-[17px] font-bold tracking-[-0.01em] text-ink">Impact History</h2>
+      <div className="mt-4">
+        {state.status === 'loading' && <SkeletonText lines={2} />}
+        {state.status === 'ready' && state.items.length === 0 && (
+          <EmptyState
+            title="Nothing here yet"
+            description="Completed activities will build your history over time."
+          />
+        )}
+        {state.status === 'ready' && state.items.length > 0 && (
+          <div className="space-y-4">
+            {state.items.map((activity) => (
+              <CompletedActivityCard key={activity.id} activity={activity} />
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function UserProfile({ id: idProp }) {
+  const params = useParams();
+  const id = idProp ?? params.id;
   const { session } = useDemoSession();
   const [state, setState] = useState({ status: 'loading', profile: null });
 
@@ -177,6 +219,8 @@ function UserProfile() {
           </div>
         ))}
       </div>
+
+      {isSelf && <ImpactHistory />}
     </PageContainer>
   );
 }

@@ -101,6 +101,12 @@ function joinOpportunity(id, options) {
   return apiPost(`/api/v1/opportunities/${id}/join`, options);
 }
 
+// Completion reads hours/story from the body — the visitor's own input
+// about their own participation, not a way to act as someone else.
+function completeOpportunity(id, { hours, story }, options) {
+  return apiPost(`/api/v1/opportunities/${id}/complete`, { ...options, body: { hours, story } });
+}
+
 function fetchActivity(options) {
   return apiGet('/api/v1/activity', options);
 }
@@ -151,6 +157,7 @@ export {
   fetchOpportunities,
   fetchOpportunity,
   joinOpportunity,
+  completeOpportunity,
   fetchActivity,
   fetchHome,
   createDemoSession,
