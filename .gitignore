@@ -3,3 +3,10 @@
 node_modules/
 .DS_Store
 dist/
+
+# Owner-supplied source photography (~81MB of 4K/6K originals). The
+# shippable, cropped, web-sized derivatives are generated into
+# frontend/public/demo-assets/ by frontend/scripts/build-demo-assets.sh
+# and those ARE committed. Keeping the originals out of git avoids
+# permanently bloating history with files the app never serves.
+Photos for Kynd/

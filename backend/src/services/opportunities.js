@@ -2,8 +2,35 @@
 
 const opportunitiesQueries = require('../db/queries/opportunities');
 const { NotFoundError } = require('../errors');
+const { COMMITMENT_BANDS } = require('../lib/discovery');
 
-function toProductOpportunity(row) {
+const CARD_ATTENDEE_PREVIEW = 3;
+const DETAIL_ATTENDEE_PREVIEW = 8;
+
+function durationMinutes(startsAt, endsAt) {
+  return Math.round((new Date(endsAt) - new Date(startsAt)) / 60000);
+}
+
+// Maps a real duration onto the same bands the filter API exposes, so a
+// card's "2 hours" label and the "1-3 hours" filter can never disagree.
+function commitmentBand(minutes) {
+  for (const [key, band] of Object.entries(COMMITMENT_BANDS)) {
+    const aboveMin =
+      band.minMinutes === null ||
+      (band.exclusiveMin ? minutes > band.minMinutes : minutes >= band.minMinutes);
+    const belowMax =
+      band.maxMinutes === null ||
+      (band.exclusiveMax ? minutes < band.maxMinutes : minutes <= band.maxMinutes);
+    if (aboveMin && belowMax) return key;
+  }
+  return null;
+}
+
+function toAttendee(row) {
+  return { id: row.id, name: row.display_name, avatarUrl: row.avatar_url };
+}
+
+function toProductOpportunity(row, { attendees = [] } = {}) {
   const host = row.host_user_id
     ? {
         type: 'user',
@@ -19,8 +46,10 @@ function toProductOpportunity(row) {
         verified: row.host_organization_verified,
       };
 
+  // Participant counts stay derived from registrations — never stored.
   const joined = row.joined_count;
   const available = Math.max(row.capacity - joined, 0);
+  const minutes = durationMinutes(row.starts_at, row.ends_at);
 
   return {
     id: row.id,
@@ -32,7 +61,12 @@ function toProductOpportunity(row) {
     description: row.description,
     whatYoullDo: row.what_youll_do,
     requirements: row.requirements,
-    timing: { startsAt: row.starts_at, endsAt: row.ends_at },
+    timing: {
+      startsAt: row.starts_at,
+      endsAt: row.ends_at,
+      durationMinutes: minutes,
+      commitment: commitmentBand(minutes),
+    },
     location: row.is_online
       ? { isOnline: true }
       : {
@@ -42,17 +76,36 @@ function toProductOpportunity(row) {
           state: row.state,
         },
     capacity: row.capacity,
-    participants: { joined, available },
+    participants: {
+      joined,
+      available,
+      // Non-personalized social proof: who is actually registered. When the
+      // social graph exists this same shape gains "followed by you" context
+      // without the consumers of it changing.
+      preview: attendees.map(toAttendee),
+    },
     imageUrl: row.image_url,
   };
 }
 
-async function listOpportunities({ limit = 20, offset = 0 } = {}) {
-  const rows = await opportunitiesQueries.findPublishedOpportunities({
+async function listOpportunities({ limit = 20, offset = 0, ...filters } = {}) {
+  const { rows, total } = await opportunitiesQueries.searchOpportunities({
     limit,
     offset,
+    ...filters,
   });
-  return rows.map(toProductOpportunity);
+
+  const previews = await opportunitiesQueries.findAttendeePreviewsFor(
+    rows.map((row) => row.id),
+    CARD_ATTENDEE_PREVIEW
+  );
+
+  return {
+    opportunities: rows.map((row) =>
+      toProductOpportunity(row, { attendees: previews.get(row.id) || [] })
+    ),
+    total,
+  };
 }
 
 async function getOpportunityDetail(id) {
@@ -60,7 +113,16 @@ async function getOpportunityDetail(id) {
   if (!row) {
     throw new NotFoundError('Opportunity not found');
   }
-  return toProductOpportunity(row);
+  const attendees = await opportunitiesQueries.findAttendeePreview(
+    id,
+    DETAIL_ATTENDEE_PREVIEW
+  );
+  return toProductOpportunity(row, { attendees });
 }
 
-module.exports = { listOpportunities, getOpportunityDetail };
+module.exports = {
+  listOpportunities,
+  getOpportunityDetail,
+  commitmentBand,
+  durationMinutes,
+};

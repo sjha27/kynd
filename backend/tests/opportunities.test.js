@@ -42,7 +42,9 @@ describe('opportunities API', () => {
     expect(opportunity.id).toBe(FLAGSHIP_OPPORTUNITY_ID);
     expect(opportunity.title).toBe('Piedmont Park Community Cleanup');
     expect(opportunity.capacity).toBe(25);
-    expect(opportunity.participants).toEqual({ joined: 5, available: 20 });
+    // toMatchObject rather than toEqual: participants now also carries a
+    // non-personalized attendee `preview` for social context.
+    expect(opportunity.participants).toMatchObject({ joined: 5, available: 20 });
     expect(opportunity.host).toMatchObject({
       type: 'organization',
       name: 'Riverlight Atlanta',

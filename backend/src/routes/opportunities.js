@@ -4,17 +4,30 @@ const express = require('express');
 const opportunitiesService = require('../services/opportunities');
 const { parseUuidParam } = require('../lib/uuid');
 const { parsePaginationParams } = require('../lib/pagination');
+const { parseDiscoveryParams } = require('../lib/discovery');
 
 const router = express.Router();
 
+// Read-only. Discover does not write; registrations/saves arrive with their
+// own vertical slices.
 router.get('/', async (req, res, next) => {
   try {
     const { limit, offset } = parsePaginationParams(req.query);
-    const opportunities = await opportunitiesService.listOpportunities({
+    const filters = parseDiscoveryParams(req.query);
+
+    const { opportunities, total } = await opportunitiesService.listOpportunities({
       limit,
       offset,
+      ...filters,
     });
-    res.json({ opportunities });
+
+    res.json({
+      opportunities,
+      // Echoing the applied filters back lets the UI render active-filter
+      // chips from the server's interpretation rather than its own guess.
+      page: { limit, offset, total },
+      filters,
+    });
   } catch (err) {
     next(err);
   }
