@@ -71,7 +71,7 @@ describe('join + activity', () => {
       const names = (await detail(FLAGSHIP, sessionId)).body.opportunity.participants.preview
         .map((p) => p.name);
       expect(names).toContain('Maya Ellis');
-      expect(names).toContain('Kynd Visitor');
+      expect(names).toContain('Frank Enstien');
     });
   });
 
@@ -278,7 +278,7 @@ describe('join + activity', () => {
 
       const bPreview = (await detail(FLAGSHIP, b.sessionId)).body.opportunity.participants.preview;
       expect(bPreview.map((p) => p.id)).not.toContain(a.user.id);
-      expect(bPreview.every((p) => p.name !== 'Kynd Visitor')).toBe(true);
+      expect(bPreview.every((p) => p.name !== 'Frank Enstien')).toBe(true);
     });
 
     it('scopes list results the same way as detail', async () => {

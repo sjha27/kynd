@@ -37,13 +37,27 @@ async function deleteExpiredSessions(client = { query }, limit = 100) {
 }
 
 /*
- * Creates the session and its temporary user atomically.
+ * Creates the session, its temporary user, and that user's starter social
+ * graph (causes + follows) atomically. All of it must exist together or not
+ * at all — a session without its user would resolve to a visitor with no
+ * identity, and a user with only some of its starter rows would leave a
+ * partially-established persona. Any failure after BEGIN rolls the whole
+ * thing back, including the session and user rows already inserted.
  *
- * The pair must exist together or not at all — a session without its user
- * would resolve to a visitor with no identity on every later request. Any
- * failure after BEGIN rolls the whole thing back.
+ * causeIds/followedUserIds/followedOrganizationIds default to empty so this
+ * still works as a plain session+user creation if ever called without a
+ * starter state.
  */
-async function createSessionWithUser({ sessionId, userId, displayName, city, state }) {
+async function createSessionWithUser({
+  sessionId,
+  userId,
+  displayName,
+  city,
+  state,
+  causeIds = [],
+  followedUserIds = [],
+  followedOrganizationIds = [],
+}) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -64,6 +78,30 @@ async function createSessionWithUser({ sessionId, userId, displayName, city, sta
        RETURNING id, display_name, city, state, created_at`,
       [userId, sessionId, displayName, city, state]
     );
+
+    if (causeIds.length > 0) {
+      await client.query(
+        `INSERT INTO user_causes (user_id, cause_id)
+         SELECT $1, unnest($2::uuid[])`,
+        [userId, causeIds]
+      );
+    }
+
+    if (followedUserIds.length > 0) {
+      await client.query(
+        `INSERT INTO user_follows (follower_user_id, followed_user_id)
+         SELECT $1, unnest($2::uuid[])`,
+        [userId, followedUserIds]
+      );
+    }
+
+    if (followedOrganizationIds.length > 0) {
+      await client.query(
+        `INSERT INTO organization_follows (user_id, organization_id)
+         SELECT $1, unnest($2::uuid[])`,
+        [userId, followedOrganizationIds]
+      );
+    }
 
     await client.query('COMMIT');
     return { session: session.rows[0], user: user.rows[0] };

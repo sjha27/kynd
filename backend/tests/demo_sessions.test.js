@@ -42,7 +42,7 @@ describe('demo sessions', () => {
       expect(res.status).toBe(201);
       expect(res.body.sessionId).toMatch(UUID);
       expect(res.body.user.id).toMatch(UUID);
-      expect(res.body.user.name).toBe('Kynd Visitor');
+      expect(res.body.user.name).toBe('Frank Enstien');
 
       // Product-facing shape only — no database bookkeeping leaks out.
       expect(Object.keys(res.body).sort()).toEqual(['expiresAt', 'sessionId', 'user']);
@@ -80,7 +80,7 @@ describe('demo sessions', () => {
         createdSessionIds.push(res.body.sessionId);
         expect(res.body.sessionId).not.toBe(UNKNOWN_UUID);
         expect(res.body.user.id).not.toBe(UNKNOWN_UUID);
-        expect(res.body.user.name).toBe('Kynd Visitor');
+        expect(res.body.user.name).toBe('Frank Enstien');
       } else {
         // Rate limited is an acceptable outcome; the assertion above is the point.
         expect(res.status).toBe(429);
@@ -256,18 +256,22 @@ describe('demo sessions', () => {
         return;
       }
 
-      // The full approved write surface after the Social Graph slice.
+      // The full approved write surface after the starter-persona slice.
       // registrations has INSERT (new join) and UPDATE (reactivate a
       // cancelled one) but deliberately no DELETE or TRUNCATE — Join never
       // removes history. user_follows/organization_follows have INSERT and
       // DELETE only — a follow edge has no status column to reactivate, so
-      // Unfollow is a real delete and there is nothing to UPDATE.
+      // Unfollow is a real delete and there is nothing to UPDATE. user_causes
+      // has INSERT only — the starter cause rows are created once at session
+      // creation and removed only via the user's ON DELETE CASCADE, never
+      // updated or deleted directly.
       expect(writable).toEqual({
         demo_sessions: ['DELETE', 'INSERT'],
         registrations: ['INSERT', 'UPDATE'],
         users: ['INSERT'],
         user_follows: ['DELETE', 'INSERT'],
         organization_follows: ['DELETE', 'INSERT'],
+        user_causes: ['INSERT'],
       });
     });
   });

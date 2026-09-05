@@ -4,26 +4,34 @@ const crypto = require('node:crypto');
 
 const demoSessionQueries = require('../db/queries/demo_sessions');
 const { SessionError } = require('../errors');
+const {
+  PERSONA,
+  STARTER_CAUSE_IDS,
+  STARTER_FOLLOWED_USER_IDS,
+  STARTER_FOLLOWED_ORGANIZATION_IDS,
+} = require('../config/demo_persona');
 
 /*
  * The temporary visitor.
  *
- * Deliberately empty: a neutral name and the minimum the frozen schema
- * requires (display_name, city and state are NOT NULL; avatar_url and bio are
- * nullable and stay null). No bio, no causes, no follows, no history.
+ * Lightly established, not blank: a starter cause affinity and a small
+ * starter social graph (see config/demo_persona.js) so a recruiter opens
+ * something that already feels like an existing social account, while
+ * avatar_url and bio stay null (monogram fallback) and no activity,
+ * registration, or contribution history is fabricated — that part of the
+ * product is still the recruiter's to do.
  *
- * The visitor is NOT Maya or any other seeded identity — they are a new,
- * empty participant arriving in an already-alive Atlanta community, so their
- * profile should start genuinely blank and only fill through their own
- * actions in later slices.
+ * The visitor is NOT Maya or any other seeded identity — a new participant
+ * arriving in an already-alive Atlanta community, with an empty history that
+ * only fills through their own actions.
  *
  * Atlanta/GA because the seeded world is an Atlanta ecosystem and `state`
  * is constrained to a two-letter code.
  */
 const VISITOR = Object.freeze({
-  displayName: 'Kynd Visitor',
-  city: 'Atlanta',
-  state: 'GA',
+  displayName: PERSONA.displayName,
+  city: PERSONA.city,
+  state: PERSONA.state,
 });
 
 // Product-facing shape. No database internals, no session bookkeeping
@@ -53,6 +61,9 @@ async function createDemoSession() {
     displayName: VISITOR.displayName,
     city: VISITOR.city,
     state: VISITOR.state,
+    causeIds: STARTER_CAUSE_IDS,
+    followedUserIds: STARTER_FOLLOWED_USER_IDS,
+    followedOrganizationIds: STARTER_FOLLOWED_ORGANIZATION_IDS,
   });
 
   return toPublicSession({

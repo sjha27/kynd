@@ -50,20 +50,20 @@ const unfollowOrg = (id, sessionId) => {
 };
 
 describe('social graph — follow/unfollow', () => {
-  let mayaId;
-  let riverlightId;
-  let mayaSeededFollowers;
-  let riverlightSeededFollowers;
+  let anchorUserId;
+  let anchorOrgId;
+  let anchorUserSeededFollowers;
+  let anchorOrgSeededFollowers;
 
   beforeAll(async () => {
-    mayaId = await findIdByName('users', 'display_name', 'Maya Ellis');
-    riverlightId = await findIdByName('organizations', 'name', 'Riverlight Atlanta');
+    anchorUserId = await findIdByName('users', 'display_name', 'Priya Griffin');
+    anchorOrgId = await findIdByName('organizations', 'name', 'Bright Futures Lab');
 
-    const anon = await userProfile(mayaId);
-    mayaSeededFollowers = anon.body.profile.followerCount;
+    const anon = await userProfile(anchorUserId);
+    anchorUserSeededFollowers = anon.body.profile.followerCount;
 
-    const anonOrg = await organization(riverlightId);
-    riverlightSeededFollowers = anonOrg.body.organization.followerCount;
+    const anonOrg = await organization(anchorOrgId);
+    anchorOrgSeededFollowers = anonOrg.body.organization.followerCount;
   });
 
   // Cleaned after every test, not just at the end: several tests assert
@@ -83,32 +83,32 @@ describe('social graph — follow/unfollow', () => {
     await closePool();
   });
 
-  describe('scenario 1-2: user follow isolation (Maya)', () => {
+  describe('scenario 1-2: user follow isolation', () => {
     it('A follows Maya: A sees N+1/Following, B sees N/Follow, anonymous sees N', async () => {
       const a = await newSession();
       const b = await newSession();
 
-      const before = await userProfile(mayaId, a.sessionId);
-      expect(before.body.profile.followerCount).toBe(mayaSeededFollowers);
+      const before = await userProfile(anchorUserId, a.sessionId);
+      expect(before.body.profile.followerCount).toBe(anchorUserSeededFollowers);
       expect(before.body.profile.viewerFollowing).toBe(false);
 
-      const res = await followUser(mayaId, a.sessionId);
+      const res = await followUser(anchorUserId, a.sessionId);
       expect(res.status).toBe(200);
       expect(res.body).toEqual({
         following: true,
-        followerCount: mayaSeededFollowers + 1,
+        followerCount: anchorUserSeededFollowers + 1,
       });
 
-      const aView = await userProfile(mayaId, a.sessionId);
-      expect(aView.body.profile.followerCount).toBe(mayaSeededFollowers + 1);
+      const aView = await userProfile(anchorUserId, a.sessionId);
+      expect(aView.body.profile.followerCount).toBe(anchorUserSeededFollowers + 1);
       expect(aView.body.profile.viewerFollowing).toBe(true);
 
-      const bView = await userProfile(mayaId, b.sessionId);
-      expect(bView.body.profile.followerCount).toBe(mayaSeededFollowers);
+      const bView = await userProfile(anchorUserId, b.sessionId);
+      expect(bView.body.profile.followerCount).toBe(anchorUserSeededFollowers);
       expect(bView.body.profile.viewerFollowing).toBe(false);
 
-      const anonView = await userProfile(mayaId);
-      expect(anonView.body.profile.followerCount).toBe(mayaSeededFollowers);
+      const anonView = await userProfile(anchorUserId);
+      expect(anonView.body.profile.followerCount).toBe(anchorUserSeededFollowers);
       expect(anonView.body.profile.viewerFollowing).toBe(false);
     });
 
@@ -116,56 +116,56 @@ describe('social graph — follow/unfollow', () => {
       const a = await newSession();
       const b = await newSession();
 
-      await followUser(mayaId, a.sessionId);
-      const bRes = await followUser(mayaId, b.sessionId);
+      await followUser(anchorUserId, a.sessionId);
+      const bRes = await followUser(anchorUserId, b.sessionId);
 
-      expect(bRes.body.followerCount).toBe(mayaSeededFollowers + 1);
+      expect(bRes.body.followerCount).toBe(anchorUserSeededFollowers + 1);
 
-      const aView = await userProfile(mayaId, a.sessionId);
-      expect(aView.body.profile.followerCount).toBe(mayaSeededFollowers + 1);
+      const aView = await userProfile(anchorUserId, a.sessionId);
+      expect(aView.body.profile.followerCount).toBe(anchorUserSeededFollowers + 1);
 
-      const bView = await userProfile(mayaId, b.sessionId);
-      expect(bView.body.profile.followerCount).toBe(mayaSeededFollowers + 1);
+      const bView = await userProfile(anchorUserId, b.sessionId);
+      expect(bView.body.profile.followerCount).toBe(anchorUserSeededFollowers + 1);
 
       const raw = await query(
         `SELECT COUNT(*)::int AS count FROM user_follows WHERE followed_user_id = $1`,
-        [mayaId]
+        [anchorUserId]
       );
-      expect(raw.rows[0].count).toBe(mayaSeededFollowers + 2);
+      expect(raw.rows[0].count).toBe(anchorUserSeededFollowers + 2);
     });
   });
 
-  describe('scenario 3: organization follow isolation (Riverlight)', () => {
+  describe('scenario 3: organization follow isolation', () => {
     it('mirrors the user isolation scenario for an organization', async () => {
       const a = await newSession();
       const b = await newSession();
 
-      const beforeA = await organization(riverlightId, a.sessionId);
-      expect(beforeA.body.organization.followerCount).toBe(riverlightSeededFollowers);
+      const beforeA = await organization(anchorOrgId, a.sessionId);
+      expect(beforeA.body.organization.followerCount).toBe(anchorOrgSeededFollowers);
       expect(beforeA.body.organization.viewerFollowing).toBe(false);
 
-      const aRes = await followOrg(riverlightId, a.sessionId);
+      const aRes = await followOrg(anchorOrgId, a.sessionId);
       expect(aRes.body).toEqual({
         following: true,
-        followerCount: riverlightSeededFollowers + 1,
+        followerCount: anchorOrgSeededFollowers + 1,
       });
 
-      const bView = await organization(riverlightId, b.sessionId);
-      expect(bView.body.organization.followerCount).toBe(riverlightSeededFollowers);
+      const bView = await organization(anchorOrgId, b.sessionId);
+      expect(bView.body.organization.followerCount).toBe(anchorOrgSeededFollowers);
       expect(bView.body.organization.viewerFollowing).toBe(false);
 
-      const bRes = await followOrg(riverlightId, b.sessionId);
-      expect(bRes.body.followerCount).toBe(riverlightSeededFollowers + 1);
+      const bRes = await followOrg(anchorOrgId, b.sessionId);
+      expect(bRes.body.followerCount).toBe(anchorOrgSeededFollowers + 1);
 
-      const aView = await organization(riverlightId, a.sessionId);
-      expect(aView.body.organization.followerCount).toBe(riverlightSeededFollowers + 1);
+      const aView = await organization(anchorOrgId, a.sessionId);
+      expect(aView.body.organization.followerCount).toBe(anchorOrgSeededFollowers + 1);
       expect(aView.body.organization.viewerFollowing).toBe(true);
 
       const raw = await query(
         `SELECT COUNT(*)::int AS count FROM organization_follows WHERE organization_id = $1`,
-        [riverlightId]
+        [anchorOrgId]
       );
-      expect(raw.rows[0].count).toBe(riverlightSeededFollowers + 2);
+      expect(raw.rows[0].count).toBe(anchorOrgSeededFollowers + 2);
     });
   });
 
@@ -230,16 +230,16 @@ describe('social graph — follow/unfollow', () => {
     it('Follow and Unfollow both return following + viewer-visible followerCount, no second GET required', async () => {
       const a = await newSession();
 
-      const followRes = await followUser(mayaId, a.sessionId);
+      const followRes = await followUser(anchorUserId, a.sessionId);
       expect(followRes.body).toEqual({
         following: true,
-        followerCount: mayaSeededFollowers + 1,
+        followerCount: anchorUserSeededFollowers + 1,
       });
 
-      const unfollowRes = await unfollowUser(mayaId, a.sessionId);
+      const unfollowRes = await unfollowUser(anchorUserId, a.sessionId);
       expect(unfollowRes.body).toEqual({
         following: false,
-        followerCount: mayaSeededFollowers,
+        followerCount: anchorUserSeededFollowers,
       });
     });
   });
@@ -248,47 +248,47 @@ describe('social graph — follow/unfollow', () => {
     it('repeated Follow is idempotent', async () => {
       const a = await newSession();
 
-      const first = await followUser(mayaId, a.sessionId);
-      const second = await followUser(mayaId, a.sessionId);
+      const first = await followUser(anchorUserId, a.sessionId);
+      const second = await followUser(anchorUserId, a.sessionId);
 
-      expect(first.body).toEqual({ following: true, followerCount: mayaSeededFollowers + 1 });
-      expect(second.body).toEqual({ following: true, followerCount: mayaSeededFollowers + 1 });
+      expect(first.body).toEqual({ following: true, followerCount: anchorUserSeededFollowers + 1 });
+      expect(second.body).toEqual({ following: true, followerCount: anchorUserSeededFollowers + 1 });
 
       const raw = await query(
         `SELECT COUNT(*)::int AS count FROM user_follows WHERE follower_user_id = $1 AND followed_user_id = $2`,
-        [a.user.id, mayaId]
+        [a.user.id, anchorUserId]
       );
       expect(raw.rows[0].count).toBe(1);
     });
 
     it('repeated Unfollow of a user is idempotent', async () => {
       const a = await newSession();
-      await followUser(mayaId, a.sessionId);
+      await followUser(anchorUserId, a.sessionId);
 
-      const first = await unfollowUser(mayaId, a.sessionId);
-      const second = await unfollowUser(mayaId, a.sessionId);
+      const first = await unfollowUser(anchorUserId, a.sessionId);
+      const second = await unfollowUser(anchorUserId, a.sessionId);
 
-      expect(first.body).toEqual({ following: false, followerCount: mayaSeededFollowers });
-      expect(second.body).toEqual({ following: false, followerCount: mayaSeededFollowers });
+      expect(first.body).toEqual({ following: false, followerCount: anchorUserSeededFollowers });
+      expect(second.body).toEqual({ following: false, followerCount: anchorUserSeededFollowers });
     });
 
     it('repeated Follow/Unfollow of an organization is idempotent', async () => {
       const a = await newSession();
 
-      const first = await followOrg(riverlightId, a.sessionId);
-      const second = await followOrg(riverlightId, a.sessionId);
+      const first = await followOrg(anchorOrgId, a.sessionId);
+      const second = await followOrg(anchorOrgId, a.sessionId);
       expect(first.body).toEqual(second.body);
 
-      const firstOff = await unfollowOrg(riverlightId, a.sessionId);
-      const secondOff = await unfollowOrg(riverlightId, a.sessionId);
-      expect(firstOff.body).toEqual({ following: false, followerCount: riverlightSeededFollowers });
-      expect(secondOff.body).toEqual({ following: false, followerCount: riverlightSeededFollowers });
+      const firstOff = await unfollowOrg(anchorOrgId, a.sessionId);
+      const secondOff = await unfollowOrg(anchorOrgId, a.sessionId);
+      expect(firstOff.body).toEqual({ following: false, followerCount: anchorOrgSeededFollowers });
+      expect(secondOff.body).toEqual({ following: false, followerCount: anchorOrgSeededFollowers });
     });
   });
 
   describe('session requirements', () => {
     it('rejects follow/unfollow without a session', async () => {
-      const res = await followUser(mayaId);
+      const res = await followUser(anchorUserId);
       expect(res.status).toBe(401);
       expect(res.body.error.code).toBe('demo_session_invalid');
     });
