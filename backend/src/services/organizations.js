@@ -1,6 +1,7 @@
 'use strict';
 
 const organizationsQueries = require('../db/queries/organizations');
+const followsQueries = require('../db/queries/follows');
 const { NotFoundError } = require('../errors');
 
 function toProductOpportunitySummary(row) {
@@ -26,18 +27,21 @@ function toProductFundraiserSummary(row) {
   };
 }
 
-async function getOrganizationDetail(id) {
+async function getOrganizationDetail(id, { sessionId = null, viewerUserId = null } = {}) {
   const org = await organizationsQueries.findOrganizationById(id);
   if (!org) {
     throw new NotFoundError('Organization not found');
   }
 
-  const [causes, followerCount, upcomingOpportunities, fundraisers] =
+  const [causes, followerCount, upcomingOpportunities, fundraisers, viewerFollowing] =
     await Promise.all([
       organizationsQueries.findOrganizationCauses(id),
-      organizationsQueries.countFollowers(id),
-      organizationsQueries.findUpcomingOpportunities(id),
+      organizationsQueries.countFollowers(id, sessionId),
+      organizationsQueries.findUpcomingOpportunities(id, sessionId),
       organizationsQueries.findActiveFundraisers(id),
+      viewerUserId
+        ? followsQueries.isFollowingOrganization(viewerUserId, id)
+        : Promise.resolve(false),
     ]);
 
   return {
@@ -50,6 +54,7 @@ async function getOrganizationDetail(id) {
     verified: org.is_verified_demo,
     causes,
     followerCount,
+    viewerFollowing,
     upcomingOpportunities: upcomingOpportunities.map(
       toProductOpportunitySummary
     ),

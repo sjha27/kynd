@@ -6,6 +6,8 @@ import Create from './routes/Create';
 import Activity from './routes/Activity';
 import Profile from './routes/Profile';
 import OpportunityDetail from './routes/OpportunityDetail';
+import UserProfile from './routes/UserProfile';
+import OrganizationDetail from './routes/OrganizationDetail';
 import DevStatus from './routes/DevStatus';
 
 function App() {
@@ -15,6 +17,8 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/discover" element={<Discover />} />
         <Route path="/opportunities/:id" element={<OpportunityDetail />} />
+        <Route path="/users/:id" element={<UserProfile />} />
+        <Route path="/organizations/:id" element={<OrganizationDetail />} />
         <Route path="/create" element={<Create />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/profile" element={<Profile />} />

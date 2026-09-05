@@ -1,13 +1,22 @@
 'use strict';
 
 const { query } = require('../pool');
+const { visibleUserPredicate, visibleFollowerCountSql } = require('../visibility');
 
-async function findUserById(id) {
+/*
+ * A user is addressable by a viewer only if they are seeded, or they are the
+ * viewer's own temporary user. This is the same rule Join and Discover use
+ * for participant visibility, applied here to the target of a profile read
+ * (or a follow) rather than to aggregation. Another session's temporary
+ * user simply does not match this query — indistinguishable from an id that
+ * never existed, by design.
+ */
+async function findUserById(id, sessionId = null) {
   const { rows } = await query(
-    `SELECT id, display_name, avatar_url, bio, city, state, created_at
-     FROM users
-     WHERE id = $1`,
-    [id]
+    `SELECT u.id, u.display_name, u.avatar_url, u.bio, u.city, u.state, u.created_at
+     FROM users u
+     WHERE u.id = $1 AND ${visibleUserPredicate('u', '$2')}`,
+    [id, sessionId]
   );
   return rows[0] || null;
 }
@@ -24,18 +33,29 @@ async function findUserCauses(userId) {
   return rows;
 }
 
-async function countFollowers(userId) {
+// Seeded followers of this user, plus the current viewer's own temporary
+// user if they follow this profile — never another visitor's temporary
+// follow. Same rule as visibleJoinedCountSql, applied to user_follows.
+async function countFollowers(userId, sessionId = null) {
   const { rows } = await query(
-    `SELECT COUNT(*)::int AS count FROM user_follows WHERE followed_user_id = $1`,
-    [userId]
+    `SELECT ${visibleFollowerCountSql('$1', '$2')} AS count`,
+    [userId, sessionId]
   );
   return rows[0].count;
 }
 
-async function countFollowing(userId) {
+// A seeded profile's outgoing follows are always seeded->seeded (temporary
+// users didn't exist when the world was seeded), so this count cannot
+// structurally contain another visitor's edge. The predicate is still
+// applied on the followed side for defense in depth, reusing the existing
+// rule rather than assuming the invariant holds forever.
+async function countFollowing(userId, sessionId = null) {
   const { rows } = await query(
-    `SELECT COUNT(*)::int AS count FROM user_follows WHERE follower_user_id = $1`,
-    [userId]
+    `SELECT COUNT(*)::int AS count
+     FROM user_follows f
+     JOIN users vu ON vu.id = f.followed_user_id
+     WHERE f.follower_user_id = $1 AND ${visibleUserPredicate('vu', '$2')}`,
+    [userId, sessionId]
   );
   return rows[0].count;
 }

@@ -38,4 +38,39 @@ function visibleJoinedCountSql(opportunityRef, sessionParam) {
   )`;
 }
 
-module.exports = { visibleUserPredicate, visibleJoinedCountSql };
+/*
+ * Count of followers a user should appear to have for this viewer. Same
+ * shape as visibleJoinedCountSql: joins through users so another visitor's
+ * temporary follow can never inflate what this viewer sees.
+ */
+function visibleFollowerCountSql(followedUserRef, sessionParam) {
+  return `(
+    SELECT COUNT(*)::int
+    FROM user_follows vf
+    JOIN users vu ON vu.id = vf.follower_user_id
+    WHERE vf.followed_user_id = ${followedUserRef}
+      AND ${visibleUserPredicate('vu', sessionParam)}
+  )`;
+}
+
+/*
+ * Count of followers an organization should appear to have for this viewer.
+ * Organizations themselves are always seeded; only the follower side (a user)
+ * can ever be a temporary visitor, so only that side needs the predicate.
+ */
+function visibleOrganizationFollowerCountSql(organizationRef, sessionParam) {
+  return `(
+    SELECT COUNT(*)::int
+    FROM organization_follows vf
+    JOIN users vu ON vu.id = vf.user_id
+    WHERE vf.organization_id = ${organizationRef}
+      AND ${visibleUserPredicate('vu', sessionParam)}
+  )`;
+}
+
+module.exports = {
+  visibleUserPredicate,
+  visibleJoinedCountSql,
+  visibleFollowerCountSql,
+  visibleOrganizationFollowerCountSql,
+};

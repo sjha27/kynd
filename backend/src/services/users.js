@@ -1,10 +1,17 @@
 'use strict';
 
 const usersQueries = require('../db/queries/users');
+const followsQueries = require('../db/queries/follows');
 const { NotFoundError } = require('../errors');
 
-async function getUserProfile(id) {
-  const user = await usersQueries.findUserById(id);
+/*
+ * sessionId scopes visibility (which target is addressable, and which
+ * followers are visible); viewerUserId is the acting user's own id, used
+ * only to answer "does the viewer follow this profile" — the two are
+ * different values (a demo_sessions id vs. a users id) and both are needed.
+ */
+async function getUserProfile(id, { sessionId = null, viewerUserId = null } = {}) {
+  const user = await usersQueries.findUserById(id, sessionId);
   if (!user) {
     throw new NotFoundError('User not found');
   }
@@ -16,13 +23,15 @@ async function getUserProfile(id) {
     activityMetrics,
     organizationCount,
     amountRaisedCents,
+    viewerFollowing,
   ] = await Promise.all([
     usersQueries.findUserCauses(id),
-    usersQueries.countFollowers(id),
-    usersQueries.countFollowing(id),
+    usersQueries.countFollowers(id, sessionId),
+    usersQueries.countFollowing(id, sessionId),
     usersQueries.getActivityMetrics(id),
     usersQueries.countProfileOrganizations(id),
     usersQueries.getAmountRaisedCents(id),
+    viewerUserId ? followsQueries.isFollowingUser(viewerUserId, id) : Promise.resolve(false),
   ]);
 
   return {
@@ -35,6 +44,9 @@ async function getUserProfile(id) {
     causes,
     followerCount,
     followingCount,
+    // Derived on the server from the session; the browser must never infer
+    // this from follower counts, same rule as viewerJoined.
+    viewerFollowing,
     metrics: {
       hours: Number(activityMetrics.hours),
       activities: activityMetrics.activities,

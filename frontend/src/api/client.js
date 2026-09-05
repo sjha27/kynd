@@ -64,6 +64,18 @@ async function apiPost(path, { signal, body: payload } = {}) {
   return body;
 }
 
+async function apiDelete(path, { signal } = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'DELETE',
+    signal,
+    headers: withSessionHeader(),
+  });
+  const body = await response.json().catch(() => null);
+
+  if (!response.ok) throw apiError(response, body);
+  return body;
+}
+
 // Drops null/undefined/empty values so an unset filter never appears in the
 // URL as `type=`, keeping requests (and the shareable address bar) clean.
 function buildQuery(params = {}) {
@@ -93,6 +105,32 @@ function fetchActivity(options) {
   return apiGet('/api/v1/activity', options);
 }
 
+function fetchUserProfile(id, options) {
+  return apiGet(`/api/v1/users/${id}/profile`, options);
+}
+
+function fetchOrganization(id, options) {
+  return apiGet(`/api/v1/organizations/${id}`, options);
+}
+
+// Follow/unfollow take no body: the acting visitor comes from the session,
+// same rule as Join.
+function followUser(id, options) {
+  return apiPost(`/api/v1/users/${id}/follow`, options);
+}
+
+function unfollowUser(id, { signal } = {}) {
+  return apiDelete(`/api/v1/users/${id}/follow`, { signal });
+}
+
+function followOrganization(id, options) {
+  return apiPost(`/api/v1/organizations/${id}/follow`, options);
+}
+
+function unfollowOrganization(id, { signal } = {}) {
+  return apiDelete(`/api/v1/organizations/${id}/follow`, { signal });
+}
+
 function createDemoSession(options) {
   return apiPost('/api/v1/demo-sessions', options);
 }
@@ -104,6 +142,7 @@ function fetchCurrentDemoSession(options) {
 export {
   apiGet,
   apiPost,
+  apiDelete,
   buildQuery,
   fetchOpportunities,
   fetchOpportunity,
@@ -111,5 +150,11 @@ export {
   fetchActivity,
   createDemoSession,
   fetchCurrentDemoSession,
+  fetchUserProfile,
+  fetchOrganization,
+  followUser,
+  unfollowUser,
+  followOrganization,
+  unfollowOrganization,
   SESSION_HEADER,
 };

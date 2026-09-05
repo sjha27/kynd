@@ -13,6 +13,7 @@ import { opportunityImage, avatarImage } from '../lib/media';
 import { causeColor } from '../lib/causes';
 import { formatDayRange, formatDuration, formatLocation, isScarce } from '../lib/format';
 import { entrance } from '../lib/motion';
+import { useDemoSession } from '../session/DemoSessionProvider';
 
 /*
  * Scroll-linked hero.
@@ -192,8 +193,38 @@ function DetailSkeleton() {
   );
 }
 
+/*
+ * Attendees are already scoped to seeded users plus the viewer's own
+ * temporary user (see backend/src/db/visibility.js), so the only temporary
+ * identity that can ever appear here is the current visitor. Comparing ids
+ * — rather than the display name "Kynd Visitor" — is what makes this
+ * correct even if that name ever changes.
+ */
+function AttendeeItem({ person, currentUserId }) {
+  const content = (
+    <>
+      <Avatar name={person.name} src={avatarImage(person)} size="sm" />
+      <span className="text-[14px] text-ink">{person.name}</span>
+    </>
+  );
+
+  if (person.id === currentUserId) {
+    return <div className="flex items-center gap-2">{content}</div>;
+  }
+
+  return (
+    <Link
+      to={`/users/${person.id}`}
+      className="flex items-center gap-2 rounded-lg outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand"
+    >
+      {content}
+    </Link>
+  );
+}
+
 function OpportunityDetail() {
   const { id } = useParams();
+  const { session } = useDemoSession();
   const reduced = useReducedMotion();
   const [state, setState] = useState({ status: 'loading', opportunity: null });
 
@@ -260,15 +291,19 @@ function OpportunityDetail() {
         </h1>
 
         {/* Host identity sits directly under the title: who is running this
-            is part of deciding whether you trust it. */}
-        <div className="mt-4 flex items-center gap-3">
+            is part of deciding whether you trust it. Linked to the host's
+            page so trust and Follow live in the same place. */}
+        <Link
+          to={host.type === 'organization' ? `/organizations/${host.id}` : `/users/${host.id}`}
+          className="mt-4 flex items-center gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-brand"
+        >
           {host.type === 'organization' ? (
             <OrgMark name={host.name} causeName={cause.name} size="md" />
           ) : (
             <Avatar name={host.name} src={avatarImage(host)} size="md" />
           )}
           <div className="min-w-0">
-            <p className="flex items-center gap-1.5 text-[15px] font-semibold text-ink">
+            <p className="flex items-center gap-1.5 text-[15px] font-semibold text-ink hover:underline">
               <span className="truncate">{host.name}</span>
               {host.verified && (
                 <BadgeCheck
@@ -281,7 +316,7 @@ function OpportunityDetail() {
               {host.type === 'organization' ? 'Organization' : 'Community member'}
             </p>
           </div>
-        </div>
+        </Link>
 
         <div className="mt-7 grid grid-cols-1 gap-5 rounded-2xl border border-line bg-surface-sunken p-5 sm:grid-cols-2">
           <Fact
@@ -342,9 +377,8 @@ function OpportunityDetail() {
             </p>
             <ul className="mt-4 flex flex-wrap gap-x-5 gap-y-3">
               {participants.preview.map((person) => (
-                <li key={person.id} className="flex items-center gap-2">
-                  <Avatar name={person.name} src={avatarImage(person)} size="sm" />
-                  <span className="text-[14px] text-ink">{person.name}</span>
+                <li key={person.id}>
+                  <AttendeeItem person={person} currentUserId={session?.user?.id} />
                 </li>
               ))}
             </ul>

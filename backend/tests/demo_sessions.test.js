@@ -145,16 +145,23 @@ describe('demo sessions', () => {
     it('rejects an expired session', async () => {
       const sessionId = crypto.randomUUID();
       const userId = crypto.randomUUID();
-      // Created already-expired via real DB time.
+      // Both rows are created in one statement (a data-modifying CTE), not
+      // two separate round trips. This test's session is legitimately
+      // already-expired the instant it exists, so with two separate inserts
+      // another test file's concurrent, real opportunistic cleanup
+      // (deleteExpiredSessions, triggered by any session creation elsewhere)
+      // can delete it in the gap between them, and the second insert then
+      // fails its foreign key. One atomic statement removes that gap without
+      // touching the cleanup behavior itself.
       await query(
-        `INSERT INTO demo_sessions (id, created_at, expires_at)
-         VALUES ($1, now() - interval '48 hours', now() - interval '24 hours')`,
-        [sessionId]
-      );
-      await query(
-        `INSERT INTO users (id, demo_session_id, display_name, city, state)
-         VALUES ($1, $2, 'Kynd Visitor', 'Atlanta', 'GA')`,
-        [userId, sessionId]
+        `WITH session AS (
+           INSERT INTO demo_sessions (id, created_at, expires_at)
+           VALUES ($1, now() - interval '48 hours', now() - interval '24 hours')
+           RETURNING id
+         )
+         INSERT INTO users (id, demo_session_id, display_name, city, state)
+         SELECT $2, id, 'Kynd Visitor', 'Atlanta', 'GA' FROM session`,
+        [sessionId, userId]
       );
 
       const res = await currentSession(sessionId);
@@ -186,15 +193,17 @@ describe('demo sessions', () => {
     it('removes expired sessions and their users, leaving seeded users intact', async () => {
       const expiredId = crypto.randomUUID();
       const expiredUserId = crypto.randomUUID();
+      // Single atomic statement — see the comment on the equivalent insert
+      // in the 'resolution' describe block above for why.
       await query(
-        `INSERT INTO demo_sessions (id, created_at, expires_at)
-         VALUES ($1, now() - interval '48 hours', now() - interval '24 hours')`,
-        [expiredId]
-      );
-      await query(
-        `INSERT INTO users (id, demo_session_id, display_name, city, state)
-         VALUES ($1, $2, 'Kynd Visitor', 'Atlanta', 'GA')`,
-        [expiredUserId, expiredId]
+        `WITH session AS (
+           INSERT INTO demo_sessions (id, created_at, expires_at)
+           VALUES ($1, now() - interval '48 hours', now() - interval '24 hours')
+           RETURNING id
+         )
+         INSERT INTO users (id, demo_session_id, display_name, city, state)
+         SELECT $2, id, 'Kynd Visitor', 'Atlanta', 'GA' FROM session`,
+        [expiredId, expiredUserId]
       );
 
       const live = await trackedSession();
@@ -247,13 +256,18 @@ describe('demo sessions', () => {
         return;
       }
 
-      // The full approved write surface after the Join slice. registrations
-      // has INSERT (new join) and UPDATE (reactivate a cancelled one) but
-      // deliberately no DELETE or TRUNCATE — Join never removes history.
+      // The full approved write surface after the Social Graph slice.
+      // registrations has INSERT (new join) and UPDATE (reactivate a
+      // cancelled one) but deliberately no DELETE or TRUNCATE — Join never
+      // removes history. user_follows/organization_follows have INSERT and
+      // DELETE only — a follow edge has no status column to reactivate, so
+      // Unfollow is a real delete and there is nothing to UPDATE.
       expect(writable).toEqual({
         demo_sessions: ['DELETE', 'INSERT'],
         registrations: ['INSERT', 'UPDATE'],
         users: ['INSERT'],
+        user_follows: ['DELETE', 'INSERT'],
+        organization_follows: ['DELETE', 'INSERT'],
       });
     });
   });
