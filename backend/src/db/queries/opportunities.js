@@ -403,6 +403,80 @@ async function joinOpportunity({ opportunityId, userId, sessionId }) {
 }
 
 /*
+ * Leaving an opportunity.
+ *
+ * The registration row is never deleted — its status becomes 'cancelled',
+ * which is exactly the state Join already knows how to reactivate. That is
+ * what keeps one person's participation in one opportunity a single
+ * relationship with a history, rather than a pile of rows.
+ *
+ * A registration that already produced an activity is refused: the completed
+ * contribution is real history, and cancelling the relationship beneath it
+ * would leave an activity describing participation the registration denies.
+ *
+ * Same visibility rule as Join, and scoped to the acting user's own
+ * registration, so a caller can only ever leave something they joined.
+ */
+async function leaveOpportunity({ opportunityId, userId, sessionId }) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const opportunity = await client.query(
+      `SELECT o.id, o.capacity
+       FROM opportunities o
+       LEFT JOIN users hu ON hu.id = o.host_user_id
+       WHERE o.id = $1 AND ${visibleOpportunityPredicate('o', 'hu', '$2')}`,
+      [opportunityId, sessionId]
+    );
+    if (opportunity.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return { outcome: 'not_found' };
+    }
+    const capacity = opportunity.rows[0].capacity;
+
+    const registration = await client.query(
+      `SELECT r.id, r.status,
+              (SELECT 1 FROM activities a WHERE a.registration_id = r.id) IS NOT NULL AS completed
+       FROM registrations r
+       WHERE r.user_id = $1 AND r.opportunity_id = $2`,
+      [userId, opportunityId]
+    );
+
+    if (registration.rowCount > 0 && registration.rows[0].completed) {
+      await client.query('ROLLBACK');
+      return { outcome: 'completed' };
+    }
+
+    // Idempotent: no registration, or one already cancelled, means the
+    // visitor is already not participating — their intent is satisfied, so
+    // this reports the current state rather than failing. Same reasoning as
+    // Join being safe to repeat, and unsave being safe on an unsaved item.
+    if (registration.rowCount > 0 && registration.rows[0].status === 'joined') {
+      await client.query(
+        `UPDATE registrations
+         SET status = 'cancelled', cancelled_at = now()
+         WHERE id = $1 AND status = 'joined'`,
+        [registration.rows[0].id]
+      );
+    }
+
+    const after = await client.query(
+      `SELECT ${visibleJoinedCountSql('$1', '$2')} AS joined_count`,
+      [opportunityId, sessionId]
+    );
+
+    await client.query('COMMIT');
+    return { outcome: 'left', capacity, joinedCount: after.rows[0].joined_count };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/*
  * The current visitor's upcoming joined opportunities.
  *
  * Scoped by session rather than by user id alone, so a caller cannot pass
@@ -561,6 +635,7 @@ module.exports = {
   searchOpportunities,
   findOpportunityById,
   findSavedForSession,
+  leaveOpportunity,
   resolveOpportunityInputs,
   insertOpportunity,
   joinOpportunity,

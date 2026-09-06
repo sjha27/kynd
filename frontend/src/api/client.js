@@ -107,6 +107,13 @@ function joinOpportunity(id, options) {
   return apiPost(`/api/v1/opportunities/${id}/join`, options);
 }
 
+// Leaving takes no body either. DELETE is right at the product level: the
+// visitor's active participation is removed, even though the registration
+// row survives as 'cancelled' so rejoining reuses it.
+function leaveOpportunity(id, { signal } = {}) {
+  return apiDelete(`/api/v1/opportunities/${id}/join`, { signal });
+}
+
 // Completion reads hours/story from the body — the visitor's own input
 // about their own participation, not a way to act as someone else.
 function completeOpportunity(id, { hours, story }, options) {
@@ -232,6 +239,7 @@ export {
   fetchOpportunity,
   createOpportunity,
   joinOpportunity,
+  leaveOpportunity,
   completeOpportunity,
   fetchActivity,
   logActivity,

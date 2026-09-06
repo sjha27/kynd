@@ -8,6 +8,7 @@ import Button from '../components/ui/Button';
 import OpportunityCard from '../components/opportunity/OpportunityCard';
 import OpportunityCardSkeleton from '../components/opportunity/OpportunityCardSkeleton';
 import CompleteAction from '../components/activity/CompleteAction';
+import LeaveAction from '../components/opportunity/LeaveAction';
 import CompletedActivityCard from '../components/activity/CompletedActivityCard';
 import { fetchActivity } from '../api/client';
 
@@ -109,7 +110,11 @@ function Upcoming({ items, awaitingConfirmation, status, onReload }) {
             {awaitingConfirmation.map((opportunity) => (
               <div key={opportunity.id}>
                 <OpportunityCard opportunity={opportunity} />
-                <CompleteAction opportunity={opportunity} onCompleted={onReload} />
+                {/* No Leave here: this one already happened, so the honest
+                    next step is recording it, not dropping out of it. */}
+                <div className="mt-2">
+                  <CompleteAction opportunity={opportunity} onCompleted={onReload} />
+                </div>
               </div>
             ))}
           </div>
@@ -121,7 +126,13 @@ function Upcoming({ items, awaitingConfirmation, status, onReload }) {
           {items.map((opportunity) => (
             <div key={opportunity.id}>
               <OpportunityCard opportunity={opportunity} />
-              <CompleteAction opportunity={opportunity} onCompleted={onReload} />
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <CompleteAction opportunity={opportunity} onCompleted={onReload} />
+                {/* Upcoming already has an action area, so Leave belongs
+                    here too — this is where someone realises they can't
+                    make it. A full reload keeps every tab honest. */}
+                <LeaveAction opportunity={opportunity} onLeft={onReload} />
+              </div>
             </div>
           ))}
         </div>

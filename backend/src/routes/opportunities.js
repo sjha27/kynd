@@ -99,6 +99,29 @@ router.post('/:id/join', requireDemoSession(), async (req, res, next) => {
 });
 
 /*
+ * Leaving an opportunity.
+ *
+ * DELETE is right at the product level even though no row is deleted: what
+ * is being removed is the visitor's active participation. The registration
+ * itself survives as 'cancelled', which is the state Join reactivates, so
+ * leaving and rejoining reuses one relationship rather than accumulating
+ * rows. Acting user comes from the session, same rule as Join.
+ */
+router.delete('/:id/join', requireDemoSession(), async (req, res, next) => {
+  try {
+    const id = parseUuidParam(req.params.id, 'opportunity id');
+    const result = await opportunitiesService.leaveOpportunity({
+      opportunityId: id,
+      sessionId: req.demo.sessionId,
+      userId: req.demo.user.id,
+    });
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/*
  * Save is a bookmark, not participation: no capacity, no social proof, no
  * effect on anyone else. Idempotent in both directions, and the acting user
  * comes from the session like every other write.

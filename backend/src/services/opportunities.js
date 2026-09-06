@@ -167,6 +167,38 @@ async function joinOpportunity({ opportunityId, sessionId, userId }) {
   };
 }
 
+/*
+ * Leave, as a product operation — the counterpart to Join.
+ *
+ * Returns the same derived participation shape Join does, so the caller can
+ * apply one consistent update either way. Idempotent, so a double click or a
+ * retry lands on the same state instead of an error.
+ */
+async function leaveOpportunity({ opportunityId, sessionId, userId }) {
+  const result = await opportunitiesQueries.leaveOpportunity({
+    opportunityId,
+    userId,
+    sessionId,
+  });
+
+  if (result.outcome === 'not_found') {
+    throw new NotFoundError('Opportunity not found');
+  }
+  if (result.outcome === 'completed') {
+    throw new ConflictError(
+      'This is already part of your history and cannot be left.',
+      'opportunity_already_completed'
+    );
+  }
+
+  return {
+    joined: false,
+    capacity: result.capacity,
+    participantCount: result.joinedCount,
+    availableSpots: Math.max(result.capacity - result.joinedCount, 0),
+  };
+}
+
 // The visitor's own upcoming joined opportunities, shaped like the cards
 // Discover already renders so Activity can reuse them.
 async function listUpcomingForSession(sessionId) {
@@ -327,6 +359,7 @@ module.exports = {
   getOpportunityDetail,
   createOpportunity,
   joinOpportunity,
+  leaveOpportunity,
   listUpcomingForSession,
   listAwaitingConfirmationForSession,
   listSavedForSession,

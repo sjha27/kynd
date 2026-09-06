@@ -10,6 +10,7 @@ import Skeleton, { SkeletonText } from '../components/ui/Skeleton';
 import ErrorState from '../components/ui/ErrorState';
 import Button from '../components/ui/Button';
 import SaveAction from '../components/social/SaveAction';
+import LeaveAction from '../components/opportunity/LeaveAction';
 import EngagementBar from '../components/social/EngagementBar';
 import { opportunityImage, avatarImage } from '../lib/media';
 import { causeColor } from '../lib/causes';
@@ -115,7 +116,7 @@ function Prose({ title, body }) {
  * looking update after a successful join just applies the numbers the server
  * returned — it never invents them.
  */
-function JoinAction({ opportunity, past, onJoined }) {
+function JoinAction({ opportunity, past, onJoined, onLeft }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(null);
 
@@ -159,6 +160,10 @@ function JoinAction({ opportunity, past, onJoined }) {
         <Link to="/activity" className="text-[14px] font-semibold text-brand underline">
           See it in Activity
         </Link>
+        {/* Leaving stays deliberately quiet beside the Joined state, and
+            asks before it acts. Absent once the opportunity is past, where
+            the next step is completing it, not dropping out. */}
+        <LeaveAction opportunity={opportunity} onLeft={onLeft} />
       </div>
     );
   }
@@ -363,6 +368,26 @@ function OpportunityDetail() {
                     ...prev.opportunity.participants,
                     joined: result.participantCount,
                     available: result.availableSpots,
+                  },
+                },
+              }))
+            }
+            onLeft={(result) =>
+              setState((prev) => ({
+                ...prev,
+                opportunity: {
+                  ...prev.opportunity,
+                  viewerJoined: false,
+                  participants: {
+                    ...prev.opportunity.participants,
+                    joined: result.participantCount,
+                    available: result.availableSpots,
+                    // The viewer is no longer among those going, so drop
+                    // them from the preview rather than waiting for a
+                    // refetch to correct it.
+                    preview: prev.opportunity.participants.preview.filter(
+                      (p) => p.id !== session?.user?.id
+                    ),
                   },
                 },
               }))

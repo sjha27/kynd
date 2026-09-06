@@ -42,7 +42,7 @@ function CompleteAction({ opportunity, onCompleted }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="mt-2 text-[13px] font-semibold text-brand underline-offset-2 hover:underline"
+        className="text-[13px] font-semibold text-brand underline-offset-2 hover:underline"
       >
         {label}
       </button>
@@ -78,7 +78,7 @@ function CompleteAction({ opportunity, onCompleted }) {
   return (
     <form
       onSubmit={submit}
-      className="mt-2 space-y-3 rounded-2xl border border-line bg-surface-sunken p-3.5"
+      className="w-full space-y-3 rounded-2xl border border-line bg-surface-sunken p-3.5"
     >
       <p className="text-[13px] font-semibold text-ink">
         {ended ? 'Did you participate?' : 'Demo: simulate completing this opportunity'}
