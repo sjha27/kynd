@@ -7,6 +7,7 @@ import { CAUSES } from '../lib/causes';
 import { todayInAtlanta } from '../lib/format';
 import { logActivity } from '../api/client';
 import { SensitiveInfoNotice } from '../components/demo/DemoNotice';
+import Field, { FIELD_CLASSES } from '../components/ui/Field';
 
 /*
  * Manual activity logging.
@@ -21,19 +22,6 @@ import { SensitiveInfoNotice } from '../components/demo/DemoNotice';
  * external organization, which is an equally valid answer. The client never
  * sends an organization id — resolving the name is the backend's job.
  */
-
-const FIELD_CLASSES =
-  'mt-1.5 block w-full rounded-control border border-line-strong bg-surface px-3 py-2.5 text-[15px] text-ink';
-
-function Field({ label, hint, children }) {
-  return (
-    <label className="block">
-      <span className="text-[13px] font-semibold text-ink">{label}</span>
-      {children}
-      {hint && <span className="mt-1.5 block text-[13px] text-ink-muted">{hint}</span>}
-    </label>
-  );
-}
 
 function LogActivity() {
   const navigate = useNavigate();

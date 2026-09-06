@@ -41,7 +41,7 @@ function LeaveAction({ opportunity, onLeft, className = '' }) {
       <button
         type="button"
         onClick={() => setConfirming(true)}
-        className={`text-[13px] font-medium text-ink-subtle underline-offset-2 transition-colors hover:text-ink hover:underline ${className}`}
+        className={`text-[13px] font-medium text-ink-subtle underline-offset-2 transition-colors hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 ${className}`}
       >
         Leave
       </button>

@@ -190,7 +190,7 @@ function UserProfile({ id: idProp }) {
           )}
         </header>
 
-        <main className="mt-10 lg:mt-0">
+        <section className="mt-10 lg:mt-0">
           <div className="mb-5 flex items-baseline justify-between gap-4 border-b border-line pb-3">
             <h2 className="text-[19px] font-bold tracking-[-0.015em] text-ink">Impact History</h2>
             {p.activities.length > 0 && (
@@ -205,7 +205,7 @@ function UserProfile({ id: idProp }) {
             isSelf={isSelf}
             name={p.displayName.split(' ')[0]}
           />
-        </main>
+        </section>
       </div>
     </PageContainer>
   );

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { CAUSES } from '../../lib/causes';
 
 /*
@@ -27,14 +28,21 @@ function RailSection({ label, children }) {
 function RightRail() {
   return (
     <aside
-      aria-label="Community context"
+      aria-label="Browse by cause"
       className="sticky top-0 hidden h-screen w-[292px] flex-shrink-0 overflow-y-auto px-4 py-7 xl:block"
     >
       <RailSection label="Causes on Kynd">
         <ul className="flex flex-col">
           {CAUSES.map((c) => (
             <li key={c.name}>
-              <div className="flex items-center gap-3 rounded-xl px-2 py-[7px]">
+              {/* These were static rows that looked tappable and did
+                  nothing. They now go where a visitor would expect: Discover,
+                  filtered to that cause, using the filter URL Discover
+                  already reads from the address bar. */}
+              <Link
+                to={`/discover?cause=${encodeURIComponent(c.name)}`}
+                className="flex items-center gap-3 rounded-xl px-2 py-[7px] transition-colors hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
                 <span
                   className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full"
                   style={{ backgroundColor: `color-mix(in srgb, ${c.color} 14%, white)` }}
@@ -47,7 +55,7 @@ function RightRail() {
                   />
                 </span>
                 <span className="text-[14px] font-medium text-ink">{c.name}</span>
-              </div>
+              </Link>
             </li>
           ))}
         </ul>

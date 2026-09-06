@@ -39,7 +39,7 @@ function ShareAction({ title, label = 'Share' }) {
     <button
       type="button"
       onClick={share}
-      className="inline-flex min-h-[36px] items-center gap-1.5 rounded-control px-2.5 text-[13px] font-semibold text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
+      className="inline-flex min-h-[36px] items-center gap-1.5 rounded-control px-2.5 text-[13px] font-semibold text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
     >
       {copied ? (
         <Check className="h-[17px] w-[17px] text-brand" strokeWidth={2.2} aria-hidden="true" />

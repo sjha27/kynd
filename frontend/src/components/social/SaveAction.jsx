@@ -42,7 +42,7 @@ function SaveAction({ opportunity, onChange, variant = 'icon' }) {
         type="button"
         onClick={toggle}
         aria-pressed={saved}
-        className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-control border px-4 text-sm font-medium transition-colors ${
+        className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-control border px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 ${
           saved
             ? 'border-brand bg-brand/10 text-brand'
             : 'border-line-strong bg-surface text-ink hover:bg-surface-sunken'
@@ -66,7 +66,7 @@ function SaveAction({ opportunity, onChange, variant = 'icon' }) {
       aria-label={label}
       aria-pressed={saved}
       title={label}
-      className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-surface/90 text-ink shadow-[0_1px_4px_rgba(0,0,0,0.12)] transition-colors hover:bg-surface"
+      className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-surface/90 text-ink shadow-[0_1px_4px_rgba(0,0,0,0.12)] transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
     >
       <Bookmark
         className={`h-[17px] w-[17px] ${saved ? 'text-brand' : 'text-ink-muted'}`}

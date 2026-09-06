@@ -17,7 +17,10 @@ const SIZE_CLASSES = {
 function Button({ variant = 'primary', size = 'md', className = '', ...props }) {
   return (
     <button
-      className={`inline-flex items-center justify-center rounded-control font-medium transition-colors disabled:cursor-not-allowed ${SIZE_CLASSES[size]} ${VARIANT_CLASSES[variant]} ${className}`}
+      // A visible keyboard focus ring lives here rather than on each
+      // caller, so every primary action in the product is reachable and
+      // obvious to a keyboard user by construction.
+      className={`inline-flex items-center justify-center rounded-control font-medium transition-colors disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 ${SIZE_CLASSES[size]} ${VARIANT_CLASSES[variant]} ${className}`}
       {...props}
     />
   );

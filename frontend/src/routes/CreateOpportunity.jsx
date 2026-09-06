@@ -7,6 +7,7 @@ import { CAUSES } from '../lib/causes';
 import { todayInAtlanta } from '../lib/format';
 import { createOpportunity } from '../api/client';
 import { SensitiveInfoNotice } from '../components/demo/DemoNotice';
+import Field, { FIELD_CLASSES } from '../components/ui/Field';
 
 /*
  * Publishing an opportunity.
@@ -24,19 +25,6 @@ const TYPES = [
   { value: 'volunteer', label: 'Volunteer opportunity' },
   { value: 'charity_event', label: 'Charity event' },
 ];
-
-const FIELD_CLASSES =
-  'mt-1.5 block w-full rounded-control border border-line-strong bg-surface px-3 py-2.5 text-[15px] text-ink';
-
-function Field({ label, hint, children }) {
-  return (
-    <label className="block">
-      <span className="text-[13px] font-semibold text-ink">{label}</span>
-      {children}
-      {hint && <span className="mt-1.5 block text-[13px] text-ink-muted">{hint}</span>}
-    </label>
-  );
-}
 
 function CreateOpportunity() {
   const navigate = useNavigate();
@@ -166,16 +154,21 @@ function CreateOpportunity() {
           />
         </Field>
 
-        <div className="grid grid-cols-3 gap-4">
-          <Field label="Date">
-            <input
-              type="date"
-              value={form.date}
-              onChange={set('date')}
-              min={today}
-              className={FIELD_CLASSES}
-            />
-          </Field>
+        {/* Three native date/time controls side by side clip at phone
+            widths, so the date takes its own row there and the two times
+            share the next one. */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <div className="col-span-2 sm:col-span-1">
+            <Field label="Date">
+              <input
+                type="date"
+                value={form.date}
+                onChange={set('date')}
+                min={today}
+                className={FIELD_CLASSES}
+              />
+            </Field>
+          </div>
           <Field label="Starts">
             <input
               type="time"

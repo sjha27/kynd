@@ -50,7 +50,7 @@ function ReactionButton({ reaction, onClick, pending }) {
       onClick={onClick}
       disabled={pending}
       aria-pressed={reaction.viewerReacted}
-      className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-control px-2.5 text-[13px] font-semibold transition-colors disabled:opacity-60 ${
+      className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-control px-2.5 text-[13px] font-semibold transition-colors disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 ${
         reaction.viewerReacted
           ? 'bg-brand/10 text-brand'
           : 'text-ink-muted hover:bg-surface-sunken hover:text-ink'
@@ -140,7 +140,7 @@ function EngagementBar({ targetType, targetId, shareTitle, className = '' }) {
           type="button"
           onClick={() => setShowComments((v) => !v)}
           aria-expanded={showComments}
-          className="inline-flex min-h-[36px] items-center gap-1.5 rounded-control px-2.5 text-[13px] font-semibold text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
+          className="inline-flex min-h-[36px] items-center gap-1.5 rounded-control px-2.5 text-[13px] font-semibold text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
         >
           <MessageCircle className="h-[17px] w-[17px]" strokeWidth={2} aria-hidden="true" />
           Comment
@@ -161,12 +161,13 @@ function EngagementBar({ targetType, targetId, shareTitle, className = '' }) {
               onChange={(e) => setDraft(e.target.value)}
               maxLength={1000}
               placeholder="Add a comment"
-              className="min-h-[40px] flex-1 rounded-control border border-line-strong bg-surface px-3 py-2 text-[14px] text-ink"
+              aria-label="Add a comment"
+              className="min-h-[40px] flex-1 rounded-control border border-line-strong bg-surface px-3 py-2 text-[14px] text-ink placeholder:text-ink-subtle focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
             />
             <button
               type="submit"
               disabled={pending || !draft.trim()}
-              className="min-h-[40px] rounded-control px-3 text-[14px] font-semibold text-brand disabled:text-ink-subtle"
+              className="min-h-[40px] rounded-control px-3 text-[14px] font-semibold text-brand transition-colors disabled:text-ink-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
             >
               Post
             </button>

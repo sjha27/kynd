@@ -7,6 +7,7 @@ import { CAUSES } from '../lib/causes';
 import { todayInAtlanta } from '../lib/format';
 import { createFundraiser } from '../api/client';
 import { SensitiveInfoNotice } from '../components/demo/DemoNotice';
+import Field, { FIELD_CLASSES } from '../components/ui/Field';
 
 /*
  * Starting a fundraiser.
@@ -19,19 +20,6 @@ import { SensitiveInfoNotice } from '../components/demo/DemoNotice';
  * No image field: media resolves deterministically from the fundraiser's id
  * and cause, and there is no upload infrastructure to back one.
  */
-const FIELD_CLASSES =
-  'mt-1.5 block w-full rounded-control border border-line-strong bg-surface px-3 py-2.5 text-[15px] text-ink';
-
-function Field({ label, hint, children }) {
-  return (
-    <label className="block">
-      <span className="text-[13px] font-semibold text-ink">{label}</span>
-      {children}
-      {hint && <span className="mt-1.5 block text-[13px] text-ink-muted">{hint}</span>}
-    </label>
-  );
-}
-
 // The earliest end date a new fundraiser can have is tomorrow: an open
 // fundraiser that ends today is already over.
 function tomorrowInAtlanta() {
