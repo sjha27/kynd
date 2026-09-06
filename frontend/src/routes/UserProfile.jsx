@@ -8,6 +8,7 @@ import FollowAction from '../components/social/FollowAction';
 import ShareAction from '../components/social/ShareAction';
 import ProfileMetrics from '../components/profile/ProfileMetrics';
 import ImpactHistory from '../components/profile/ImpactHistory';
+import ResetDemo from '../components/demo/ResetDemo';
 import { fetchUserProfile, followUser, unfollowUser } from '../api/client';
 import { causeColor } from '../lib/causes';
 import { avatarImage } from '../lib/media';
@@ -176,6 +177,15 @@ function UserProfile({ id: idProp }) {
           </div>
 
           <ProfileMetrics metrics={p.metrics} className="mt-6" />
+
+          {/* Mobile has no left rail, so demo scaffolding lives at the foot
+              of your own profile — the closest thing to an account area.
+              Hidden on desktop, where the nav rail already carries it. */}
+          {isSelf && (
+            <div className="mt-8 border-t border-line pt-5 lg:hidden">
+              <ResetDemo />
+            </div>
+          )}
         </header>
 
         <main className="mt-10 lg:mt-0">

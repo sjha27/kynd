@@ -216,6 +216,13 @@ function fetchCurrentDemoSession(options) {
   return apiGet('/api/v1/demo-sessions/current', options);
 }
 
+// Reset Demo. The backend deletes the session and everything the visitor
+// did through the schema's cascades — clearing localStorage is not enough
+// and is never the authoritative step.
+function deleteCurrentDemoSession({ signal } = {}) {
+  return apiDelete('/api/v1/demo-sessions/current', { signal });
+}
+
 export {
   apiGet,
   apiPost,
@@ -240,6 +247,7 @@ export {
   fetchHome,
   createDemoSession,
   fetchCurrentDemoSession,
+  deleteCurrentDemoSession,
   fetchUserProfile,
   fetchOrganization,
   followUser,

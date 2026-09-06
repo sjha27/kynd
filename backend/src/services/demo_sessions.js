@@ -97,6 +97,20 @@ async function resolveDemoSession(sessionId) {
   };
 }
 
+/*
+ * Reset: end this visitor's demo and discard everything they did.
+ *
+ * Backend deletion is authoritative — clearing localStorage alone would
+ * leave the temporary user and all their rows behind, and the next visitor
+ * to that browser would have no way to reach or clean them.
+ *
+ * The caller has already been resolved by requireDemoSession, so a visitor
+ * can only ever reset their OWN session; the id is never taken from a body.
+ */
+async function resetDemoSession(sessionId) {
+  await demoSessionQueries.deleteSession(sessionId);
+}
+
 function toPublicContext(context) {
   return {
     sessionId: context.sessionId,
@@ -109,5 +123,6 @@ module.exports = {
   VISITOR,
   createDemoSession,
   resolveDemoSession,
+  resetDemoSession,
   toPublicContext,
 };

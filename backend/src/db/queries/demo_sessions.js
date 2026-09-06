@@ -138,9 +138,30 @@ async function findActiveSession(sessionId) {
   return rows[0] || null;
 }
 
+/*
+ * Deletes one session and, through the schema, everything the visitor did.
+ *
+ * This single DELETE is the whole of Reset. demo_sessions -> users is
+ * ON DELETE CASCADE, and every table a temporary visitor can write into
+ * cascades from users: registrations, activities, user_causes, user_follows,
+ * organization_follows, saved_opportunities, reactions, comments,
+ * fundraiser_supports, and the opportunities and fundraisers they created.
+ * There is deliberately no per-table cleanup list here — one would drift out
+ * of date the moment a new writable table appeared, whereas the foreign keys
+ * cannot.
+ *
+ * Seeded rows are untouched by construction: they have
+ * demo_session_id IS NULL, so nothing links them to this session.
+ */
+async function deleteSession(sessionId) {
+  const { rowCount } = await query(`DELETE FROM demo_sessions WHERE id = $1`, [sessionId]);
+  return rowCount > 0;
+}
+
 module.exports = {
   SESSION_LIFETIME,
   createSessionWithUser,
+  deleteSession,
   findActiveSession,
   deleteExpiredSessions,
 };

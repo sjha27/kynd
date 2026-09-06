@@ -1,5 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { createDemoSession, fetchCurrentDemoSession } from '../api/client';
+import {
+  createDemoSession,
+  fetchCurrentDemoSession,
+  deleteCurrentDemoSession,
+} from '../api/client';
 import {
   readStoredSessionId,
   writeStoredSessionId,
@@ -74,13 +78,55 @@ export function DemoSessionProvider({ children }) {
   }, [bootstrap]);
 
   /*
+   * Reset Demo.
+   *
+   * Order matters: the backend deletes first and is authoritative. Clearing
+   * localStorage alone would strand the temporary user and every row they
+   * created, with no way for anyone to reach them again.
+   *
+   * A 401 on the delete means the session was already gone (expired, or
+   * reset in another tab) — the visitor's intent is satisfied either way, so
+   * it continues to a fresh session rather than failing.
+   *
+   * `resetKey` increments on success so session-dependent screens can
+   * re-read; every one of them already keys its fetches off the session
+   * context, and the header the API client sends is read at request time.
+   */
+  const reset = useCallback(async () => {
+    setState((prev) => ({ ...prev, status: 'resetting' }));
+
+    try {
+      await deleteCurrentDemoSession();
+    } catch (error) {
+      if (error.status !== 401) {
+        setState((prev) => ({ ...prev, status: 'ready' }));
+        throw error;
+      }
+    }
+
+    clearStoredSessionId();
+
+    try {
+      const session = await createDemoSession();
+      writeStoredSessionId(session.sessionId);
+      setState((prev) => ({ status: 'ready', session, resetKey: (prev.resetKey ?? 0) + 1 }));
+    } catch (error) {
+      // The old session is genuinely gone, so there is nothing to restore.
+      setState({ status: 'error', session: null });
+      throw error;
+    }
+  }, []);
+
+  /*
    * Children render immediately rather than waiting on the session. Discover
    * and every other current surface are public reads that do not need a
    * visitor, so gating the whole app behind this request would add a blank
    * frame to a cold Render start for no benefit.
    */
   return (
-    <DemoSessionContext.Provider value={state}>{children}</DemoSessionContext.Provider>
+    <DemoSessionContext.Provider value={{ ...state, reset }}>
+      {children}
+    </DemoSessionContext.Provider>
   );
 }
 

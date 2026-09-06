@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react';
 import KyndMark from '../brand/KyndMark';
 import NavItem from './NavItem';
 import { NAV_ITEMS } from '../../lib/nav';
+import ResetDemo from '../demo/ResetDemo';
 
 /*
  * Left rail: light, chrome-free, sitting directly on the cream frame.
@@ -52,6 +53,13 @@ function DesktopNav() {
         <Plus className="h-[18px] w-[18px]" strokeWidth={2.6} aria-hidden="true" />
         Create
       </NavLink>
+
+      {/* Demo scaffolding lives at the foot of the rail, where a real
+          product would keep account settings — present, but never
+          competing with the product's own actions. */}
+      <div className="mt-auto pt-6">
+        <ResetDemo />
+      </div>
     </nav>
   );
 }
