@@ -15,12 +15,9 @@ function CompletedActivityCard({ activity }) {
   return (
     <div className="flex gap-4 rounded-2xl border border-line bg-surface p-4">
       {activity.imageUrl && (
-        <Photo
-          src={activity.imageUrl}
-          alt=""
-          ratio="square"
-          className="w-20 flex-shrink-0 rounded-xl"
-        />
+        <div className="w-20 flex-shrink-0">
+          <Photo src={activity.imageUrl} alt="" ratio="square" className="rounded-xl" />
+        </div>
       )}
       <div className="min-w-0">
         <p className="text-[15px] font-semibold text-ink">{activity.title}</p>

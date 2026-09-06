@@ -14,9 +14,14 @@
     "backend:dev": "npm run dev --workspace=backend",
     "backend:test": "npm run test --workspace=backend",
     "frontend:dev": "npm run dev --workspace=frontend",
-    "frontend:build": "npm run build --workspace=frontend"
+    "frontend:build": "npm run build --workspace=frontend",
+    "e2e": "playwright test",
+    "e2e:headed": "playwright test --headed"
   },
   "dependencies": {
     "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
   }
 }
