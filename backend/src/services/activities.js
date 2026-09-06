@@ -210,4 +210,19 @@ async function listCompletedForSession(sessionId) {
   return rows.map(toProductActivity);
 }
 
-module.exports = { completeOpportunity, logManualActivity, listCompletedForSession };
+/*
+ * One person's contribution history for their profile — the same product
+ * shape Activity -> Completed uses, so the same card renders both.
+ * Addressability of the profile itself is the caller's job.
+ */
+async function listActivitiesForUser(userId) {
+  const rows = await activitiesQueries.findActivitiesForUser(userId);
+  return rows.map(toProductActivity);
+}
+
+module.exports = {
+  completeOpportunity,
+  logManualActivity,
+  listCompletedForSession,
+  listActivitiesForUser,
+};

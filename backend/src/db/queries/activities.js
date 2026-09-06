@@ -125,41 +125,45 @@ async function insertManualActivity({
  * appears above older entries for that date, and finally to id so the order
  * is fully deterministic.
  */
+const COMPLETED_ACTIVITY_SELECT = `
+  SELECT
+    a.id,
+    -- occurred_on is a calendar date, not an instant. Emitted as text so
+    -- it crosses the API boundary as a plain 'YYYY-MM-DD': pg would
+    -- otherwise parse it into a JS Date at the Node process's local
+    -- midnight, which serializes to a timestamp and renders as the
+    -- previous day wherever the server runs behind the display timezone
+    -- (Render is UTC, the product displays Atlanta time).
+    to_char(a.occurred_on, 'YYYY-MM-DD') AS occurred_on,
+    a.hours,
+    a.story,
+    a.image_url,
+    a.manual_title,
+    a.manual_organization_name,
+    o.id AS opportunity_id,
+    o.title,
+    o.image_url AS opportunity_image_url,
+    COALESCE(c.name, mc.name) AS cause_name,
+    ho.id AS host_organization_id,
+    ho.name AS host_organization_name,
+    hu.id AS host_user_id,
+    hu.display_name AS host_user_name,
+    mo.id AS manual_organization_id,
+    mo.name AS manual_organization_linked_name
+  FROM activities a
+  LEFT JOIN registrations r ON r.id = a.registration_id
+  LEFT JOIN opportunities o ON o.id = r.opportunity_id
+  LEFT JOIN causes c ON c.id = o.cause_id
+  LEFT JOIN causes mc ON mc.id = a.manual_cause_id
+  LEFT JOIN organizations ho ON ho.id = o.host_organization_id
+  LEFT JOIN users hu ON hu.id = o.host_user_id
+  LEFT JOIN organizations mo ON mo.id = a.manual_organization_id
+`;
+
 async function findCompletedForSession(sessionId, limit = 50) {
   const { rows } = await query(
-    `SELECT
-       a.id,
-       -- occurred_on is a calendar date, not an instant. Emitted as text so
-       -- it crosses the API boundary as a plain 'YYYY-MM-DD': pg would
-       -- otherwise parse it into a JS Date at the Node process's local
-       -- midnight, which serializes to a timestamp and renders as the
-       -- previous day wherever the server runs behind the display timezone
-       -- (Render is UTC, the product displays Atlanta time).
-       to_char(a.occurred_on, 'YYYY-MM-DD') AS occurred_on,
-       a.hours,
-       a.story,
-       a.image_url,
-       a.manual_title,
-       a.manual_organization_name,
-       o.id AS opportunity_id,
-       o.title,
-       o.image_url AS opportunity_image_url,
-       COALESCE(c.name, mc.name) AS cause_name,
-       ho.id AS host_organization_id,
-       ho.name AS host_organization_name,
-       hu.id AS host_user_id,
-       hu.display_name AS host_user_name,
-       mo.id AS manual_organization_id,
-       mo.name AS manual_organization_linked_name
-     FROM activities a
+    `${COMPLETED_ACTIVITY_SELECT}
      JOIN users au ON au.id = a.user_id AND au.demo_session_id = $1
-     LEFT JOIN registrations r ON r.id = a.registration_id
-     LEFT JOIN opportunities o ON o.id = r.opportunity_id
-     LEFT JOIN causes c ON c.id = o.cause_id
-     LEFT JOIN causes mc ON mc.id = a.manual_cause_id
-     LEFT JOIN organizations ho ON ho.id = o.host_organization_id
-     LEFT JOIN users hu ON hu.id = o.host_user_id
-     LEFT JOIN organizations mo ON mo.id = a.manual_organization_id
      ORDER BY a.occurred_on DESC, a.created_at DESC, a.id ASC
      LIMIT $2`,
     [sessionId, limit]
@@ -167,8 +171,32 @@ async function findCompletedForSession(sessionId, limit = 50) {
   return rows;
 }
 
+/*
+ * One person's contribution history, for their profile.
+ *
+ * Deliberately scoped by user rather than by session, because a profile is
+ * a public identity surface — Maya's history is visible to anyone, which is
+ * what makes the social graph worth exploring. Addressability is decided by
+ * the caller (getUserProfile already refuses a user this viewer cannot see),
+ * so no activity of another visitor's temporary user is reachable here.
+ *
+ * Shares FindCompleted's exact select list so both feed the same
+ * toProductActivity mapper rather than growing a second shape.
+ */
+async function findActivitiesForUser(userId, limit = 40) {
+  const { rows } = await query(
+    `${COMPLETED_ACTIVITY_SELECT}
+     WHERE a.user_id = $1
+     ORDER BY a.occurred_on DESC, a.created_at DESC, a.id ASC
+     LIMIT $2`,
+    [userId, limit]
+  );
+  return rows;
+}
+
 module.exports = {
   findRegistrationForCompletion,
+  findActivitiesForUser,
   insertActivity,
   resolveManualActivityInputs,
   insertManualActivity,

@@ -130,6 +130,35 @@ export function opportunityImage(opportunity) {
 }
 
 /*
+ * A completed activity's photograph.
+ *
+ * The seed references files under /demo-assets/activities/ and a wider set
+ * of opportunity filenames than this build actually ships, so those
+ * references are honoured only when the file genuinely exists — otherwise
+ * they would render as broken images across the profile. Everything else
+ * falls back to the same deterministic cause pool, keyed by the activity's
+ * own id so a given activity always shows the same photograph.
+ *
+ * This resolves real photography of the right kind of work; it never
+ * fabricates a picture of a specific event that has no image.
+ */
+export function activityImage(activity) {
+  if (!activity) return null;
+
+  for (const candidate of [activity.imageUrl]) {
+    if (candidate && candidate.startsWith(`${BASE}/`)) {
+      const name = candidate.slice(BASE.length + 1).replace(/\.[a-z]+$/i, '');
+      if (SHIPPED.has(name)) return assetPath(name);
+    }
+  }
+
+  const pool = CAUSE_POOLS[activity.cause?.name];
+  if (!pool || pool.length === 0) return null;
+
+  return assetPath(pool[hashId(activity.id) % pool.length]);
+}
+
+/*
  * Fundraisers resolve through the same cause pools and the same stable id
  * hash as opportunities: the photography honestly depicts work in that cause
  * area, and a fundraiser always shows the same image on its card and its

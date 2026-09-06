@@ -2,6 +2,7 @@
 
 const usersQueries = require('../db/queries/users');
 const followsQueries = require('../db/queries/follows');
+const activitiesService = require('./activities');
 const { NotFoundError } = require('../errors');
 
 /*
@@ -24,6 +25,7 @@ async function getUserProfile(id, { sessionId = null, viewerUserId = null } = {}
     organizationCount,
     amountRaisedCents,
     viewerFollowing,
+    activities,
   ] = await Promise.all([
     usersQueries.findUserCauses(id),
     usersQueries.countFollowers(id, sessionId),
@@ -32,6 +34,9 @@ async function getUserProfile(id, { sessionId = null, viewerUserId = null } = {}
     usersQueries.countProfileOrganizations(id),
     usersQueries.getAmountRaisedCents(id, sessionId),
     viewerUserId ? followsQueries.isFollowingUser(viewerUserId, id) : Promise.resolve(false),
+    // Contribution history travels with the profile, so Impact History works
+    // for ANY addressable person rather than only for the current visitor.
+    activitiesService.listActivitiesForUser(id),
   ]);
 
   return {
@@ -53,6 +58,7 @@ async function getUserProfile(id, { sessionId = null, viewerUserId = null } = {}
       organizations: organizationCount,
       amountRaisedCents: Number(amountRaisedCents),
     },
+    activities,
   };
 }
 

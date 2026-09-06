@@ -4,24 +4,25 @@ import UserProfile from './UserProfile';
 import { useDemoSession } from '../session/DemoSessionProvider';
 
 /*
- * Your own profile is the same UserProfile surface everyone else's profile
- * uses (identity, causes, objective metrics, and — self-only — Impact
- * History), just addressed by the current session's own user id instead of
- * a route param. This is deliberately not a redesign of the shared
- * component or of other people's profiles.
+ * Your own profile is exactly the UserProfile surface everyone else's uses —
+ * identity, causes, objective metrics and Impact History — addressed by the
+ * current session's own user id instead of a route param. One component, so
+ * your page and Maya's are the same page, which is what makes the
+ * difference between them purely a difference in what each person has
+ * actually done.
  */
 function ProfileSkeleton() {
   return (
-    <PageContainer width="narrow">
-      <div className="flex items-center gap-4">
-        <Skeleton className="h-20 w-20" rounded="full" />
-        <div className="flex-1 space-y-2">
-          <Skeleton className="h-5 w-40" />
-          <Skeleton className="h-3 w-24" />
+    <PageContainer width="wide">
+      <div className="lg:grid lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-12">
+        <div>
+          <Skeleton className="h-24 w-24" rounded="full" />
+          <Skeleton className="mt-4 h-6 w-44" />
+          <Skeleton className="mt-2 h-3 w-28" />
         </div>
-      </div>
-      <div className="mt-8">
-        <SkeletonText lines={3} />
+        <div className="mt-10 lg:mt-0">
+          <SkeletonText lines={5} />
+        </div>
       </div>
     </PageContainer>
   );

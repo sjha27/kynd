@@ -39,6 +39,8 @@ const SIZE_CLASSES = {
   sm: 'h-9 w-9 text-xs',
   md: 'h-11 w-11 text-sm',
   lg: 'h-20 w-20 text-xl',
+  // Profile hero: the one place a person's face (or monogram) leads.
+  xl: 'h-24 w-24 text-2xl',
 };
 
 function Avatar({ src, name, shape = 'circle', size = 'md', className = '' }) {

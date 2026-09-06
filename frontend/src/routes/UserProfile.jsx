@@ -4,88 +4,68 @@ import PageContainer from '../components/layout/PageContainer';
 import Avatar from '../components/ui/Avatar';
 import Skeleton, { SkeletonText } from '../components/ui/Skeleton';
 import ErrorState from '../components/ui/ErrorState';
-import EmptyState from '../components/ui/EmptyState';
 import FollowAction from '../components/social/FollowAction';
-import CompletedActivityCard from '../components/activity/CompletedActivityCard';
-import { fetchUserProfile, followUser, unfollowUser, fetchActivity } from '../api/client';
+import ShareAction from '../components/social/ShareAction';
+import ProfileMetrics from '../components/profile/ProfileMetrics';
+import ImpactHistory from '../components/profile/ImpactHistory';
+import { fetchUserProfile, followUser, unfollowUser } from '../api/client';
 import { causeColor } from '../lib/causes';
 import { avatarImage } from '../lib/media';
 import { useDemoSession } from '../session/DemoSessionProvider';
 
 /*
- * A bare public identity card, not the full Profile from the product plan —
- * Stories and a full activity timeline stay out of scope until the Profile
- * polish checkpoint. It exists to make Follow/Following understandable
- * (identity, causes, objective metrics, viewer follow state) for ANY
- * profile, plus a simple Impact History section for the viewer's OWN
- * profile only (Completion needs somewhere to show its result) — other
- * people's profiles are unchanged.
+ * A person's contribution identity.
+ *
+ * The page answers one question — what does this person care about, and
+ * what have they contributed to over time — and everything on it is derived
+ * from real relationships: causes they chose, people who follow them,
+ * activities they completed or logged.
+ *
+ * The layout deliberately reads as a consumer social profile rather than a
+ * dashboard: on desktop the identity and its four objective facts sit in a
+ * sticky left rail while the history scrolls beside them, so the history is
+ * the body of the page and the numbers are context, not the headline. On
+ * mobile the same pieces stack in the same order.
+ *
+ * The same component serves the visitor's own profile and everyone else's;
+ * only Follow (hidden on your own) and empty-state copy differ.
  */
-const METRICS = [
-  { key: 'hours', label: 'Hours' },
-  { key: 'activities', label: 'Activities' },
-  { key: 'organizations', label: 'Organizations' },
-  { key: 'amountRaisedCents', label: 'Raised' },
-];
-
-function formatMetricValue(key, value) {
-  if (key === 'amountRaisedCents') {
-    return `$${(value / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
-  }
-  return value.toLocaleString('en-US');
-}
-
 function ProfileSkeleton() {
   return (
-    <PageContainer width="narrow">
-      <div className="flex items-center gap-4">
-        <Skeleton className="h-20 w-20" rounded="full" />
-        <div className="flex-1 space-y-2">
-          <Skeleton className="h-5 w-40" />
-          <Skeleton className="h-3 w-24" />
+    <PageContainer width="wide">
+      <div className="lg:grid lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-12">
+        <div>
+          <Skeleton className="h-24 w-24" rounded="full" />
+          <Skeleton className="mt-4 h-6 w-44" />
+          <Skeleton className="mt-2 h-3 w-28" />
+          <div className="mt-6 grid grid-cols-2 gap-2.5">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-[76px]" />
+            ))}
+          </div>
         </div>
-      </div>
-      <div className="mt-8">
-        <SkeletonText lines={3} />
+        <div className="mt-10 lg:mt-0">
+          <SkeletonText lines={6} />
+        </div>
       </div>
     </PageContainer>
   );
 }
 
-function ImpactHistory() {
-  const [state, setState] = useState({ status: 'loading', items: [] });
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchActivity({ signal: controller.signal })
-      .then((body) => setState({ status: 'ready', items: body.completed }))
-      .catch((err) => {
-        if (err.name === 'AbortError') return;
-        setState({ status: 'error', items: [] });
-      });
-    return () => controller.abort();
-  }, []);
-
+function CauseChips({ causes }) {
+  if (causes.length === 0) return null;
   return (
-    <section className="mt-8 border-t border-line pt-6">
-      <h2 className="text-[17px] font-bold tracking-[-0.01em] text-ink">Impact History</h2>
-      <div className="mt-4">
-        {state.status === 'loading' && <SkeletonText lines={2} />}
-        {state.status === 'ready' && state.items.length === 0 && (
-          <EmptyState
-            title="Nothing here yet"
-            description="Completed activities will build your history over time."
-          />
-        )}
-        {state.status === 'ready' && state.items.length > 0 && (
-          <div className="space-y-4">
-            {state.items.map((activity) => (
-              <CompletedActivityCard key={activity.id} activity={activity} />
-            ))}
-          </div>
-        )}
-      </div>
-    </section>
+    <ul className="mt-4 flex flex-wrap gap-2">
+      {causes.map((cause) => (
+        <li
+          key={cause.id}
+          className="rounded-full px-2.5 py-1 text-[12px] font-semibold text-white"
+          style={{ backgroundColor: `color-mix(in srgb, ${causeColor(cause.name)} 88%, black)` }}
+        >
+          {cause.name}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -103,10 +83,7 @@ function UserProfile({ id: idProp }) {
       .then((body) => setState({ status: 'ready', profile: body.profile }))
       .catch((err) => {
         if (err.name === 'AbortError') return;
-        setState({
-          status: err.status === 404 ? 'not-found' : 'error',
-          profile: null,
-        });
+        setState({ status: err.status === 404 ? 'not-found' : 'error', profile: null });
       });
 
     return () => controller.abort();
@@ -141,86 +118,83 @@ function UserProfile({ id: idProp }) {
 
   const p = state.profile;
   const isSelf = session?.user?.id === p.id;
+  const location = [p.city, p.state].filter(Boolean).join(', ');
+
+  const applyFollowResult = (res) =>
+    setState((prev) => ({
+      ...prev,
+      profile: {
+        ...prev.profile,
+        viewerFollowing: res.following,
+        followerCount: res.followerCount,
+      },
+    }));
 
   return (
-    <PageContainer width="narrow">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Avatar name={p.displayName} src={avatarImage(p)} size="lg" />
-          <div>
-            <h1 className="text-[22px] font-bold tracking-[-0.02em] text-ink">
-              {p.displayName}
-            </h1>
-            {(p.city || p.state) && (
-              <p className="text-[14px] text-ink-muted">
-                {[p.city, p.state].filter(Boolean).join(', ')}
+    <PageContainer width="wide">
+      <div className="lg:grid lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-12">
+        {/* Identity rail. Sticky on desktop so the person stays present
+            while their history scrolls; a plain block on mobile. */}
+        <header className="lg:sticky lg:top-8 lg:self-start">
+          <Avatar name={p.displayName} src={avatarImage(p)} size="xl" />
+
+          <h1 className="mt-4 text-[26px] font-bold leading-tight tracking-[-0.025em] text-ink">
+            {p.displayName}
+          </h1>
+          {location && <p className="mt-1 text-[15px] text-ink-muted">{location}</p>}
+
+          {p.bio && (
+            <p className="mt-3 text-[15px] leading-relaxed text-ink-muted">{p.bio}</p>
+          )}
+
+          <CauseChips causes={p.causes} />
+
+          <div className="mt-5 flex items-center gap-5 text-[14px]">
+            <span>
+              <strong className="font-bold text-ink">
+                {p.followerCount.toLocaleString('en-US')}
+              </strong>{' '}
+              <span className="text-ink-muted">Followers</span>
+            </span>
+            <span>
+              <strong className="font-bold text-ink">
+                {p.followingCount.toLocaleString('en-US')}
+              </strong>{' '}
+              <span className="text-ink-muted">Following</span>
+            </span>
+          </div>
+
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            {!isSelf && (
+              <FollowAction
+                following={p.viewerFollowing}
+                onFollow={async () => applyFollowResult(await followUser(p.id))}
+                onUnfollow={async () => applyFollowResult(await unfollowUser(p.id))}
+              />
+            )}
+            <ShareAction title={`${p.displayName} on Kynd`} label="Share profile" />
+          </div>
+
+          <ProfileMetrics metrics={p.metrics} className="mt-6" />
+        </header>
+
+        <main className="mt-10 lg:mt-0">
+          <div className="mb-5 flex items-baseline justify-between gap-4 border-b border-line pb-3">
+            <h2 className="text-[19px] font-bold tracking-[-0.015em] text-ink">Impact History</h2>
+            {p.activities.length > 0 && (
+              <p className="text-[13px] text-ink-muted">
+                {isSelf ? 'Everything you have contributed to' : 'Contributions over time'}
               </p>
             )}
           </div>
-        </div>
 
-        {!isSelf && (
-          <FollowAction
-            following={p.viewerFollowing}
-            onFollow={async () => {
-              const res = await followUser(p.id);
-              setState((prev) => ({
-                ...prev,
-                profile: { ...prev.profile, viewerFollowing: res.following, followerCount: res.followerCount },
-              }));
-            }}
-            onUnfollow={async () => {
-              const res = await unfollowUser(p.id);
-              setState((prev) => ({
-                ...prev,
-                profile: { ...prev.profile, viewerFollowing: res.following, followerCount: res.followerCount },
-              }));
-            }}
+          <ImpactHistory
+            activities={p.activities}
+            isSelf={isSelf}
+            name={p.displayName.split(' ')[0]}
           />
-        )}
+        </main>
       </div>
-
-      {p.bio && <p className="mt-4 text-[15px] leading-relaxed text-ink-muted">{p.bio}</p>}
-
-      {p.causes.length > 0 && (
-        <ul className="mt-4 flex flex-wrap gap-2">
-          {p.causes.map((cause) => (
-            <li
-              key={cause.id}
-              className="rounded-full px-2.5 py-1 text-[12px] font-semibold text-white"
-              style={{ backgroundColor: `color-mix(in srgb, ${causeColor(cause.name)} 88%, black)` }}
-            >
-              {cause.name}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="mt-5 flex items-center gap-5 border-y border-line py-4 text-[14px]">
-        <span>
-          <strong className="text-ink">{p.followerCount.toLocaleString('en-US')}</strong>{' '}
-          <span className="text-ink-muted">Followers</span>
-        </span>
-        <span>
-          <strong className="text-ink">{p.followingCount.toLocaleString('en-US')}</strong>{' '}
-          <span className="text-ink-muted">Following</span>
-        </span>
-      </div>
-
-      <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {METRICS.map(({ key, label }) => (
-          <div key={key} className="rounded-2xl border border-line bg-surface-sunken px-4 py-4">
-            <p className="text-[20px] font-bold tracking-[-0.02em] text-ink">
-              {formatMetricValue(key, p.metrics[key])}
-            </p>
-            <p className="mt-0.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-subtle">
-              {label}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {isSelf && <ImpactHistory />}
     </PageContainer>
   );
 }
