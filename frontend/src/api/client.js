@@ -131,6 +131,37 @@ function fetchHome(options) {
   return apiGet('/api/v1/home', options);
 }
 
+/*
+ * The social layer for one piece of content. targetType is
+ * activities | opportunities | fundraisers — the three targets the schema
+ * allows. Writes never send a user: the actor comes from the session.
+ */
+function fetchEngagement(targetType, targetId, options) {
+  return apiGet(`/api/v1/engagement/${targetType}/${targetId}`, options);
+}
+
+function reactToContent(targetType, targetId, { type }, options) {
+  return apiPost(`/api/v1/engagement/${targetType}/${targetId}/reactions`, {
+    ...options,
+    body: { type },
+  });
+}
+
+function commentOnContent(targetType, targetId, { body }, options) {
+  return apiPost(`/api/v1/engagement/${targetType}/${targetId}/comments`, {
+    ...options,
+    body: { body },
+  });
+}
+
+function saveOpportunity(id, options) {
+  return apiPost(`/api/v1/opportunities/${id}/save`, options);
+}
+
+function unsaveOpportunity(id, { signal } = {}) {
+  return apiDelete(`/api/v1/opportunities/${id}/save`, { signal });
+}
+
 function fetchFundraisers(params, options) {
   return apiGet(`/api/v1/fundraisers${buildQuery(params)}`, options);
 }
@@ -197,6 +228,11 @@ export {
   completeOpportunity,
   fetchActivity,
   logActivity,
+  fetchEngagement,
+  reactToContent,
+  commentOnContent,
+  saveOpportunity,
+  unsaveOpportunity,
   fetchFundraisers,
   fetchFundraiser,
   supportFundraiser,

@@ -1,7 +1,7 @@
 'use strict';
 
 const { query } = require('../pool');
-const { visibleOpportunityPredicate } = require('../visibility');
+const { visibleOpportunityPredicate, visibleUserPredicate } = require('../visibility');
 
 /*
  * Home's candidate-discovery queries. Each returns just enough to rank and
@@ -160,8 +160,71 @@ async function findCauseDiscoveryOpportunities(
   return rows;
 }
 
+/*
+ * Second-degree discovery: my community's community.
+ *
+ *   Frank follows Maya -> Maya reacted to Taylor's activity
+ *   -> Frank's Home can surface Taylor's activity, "Liked by Maya"
+ *
+ * This is the mechanism V7 describes, expressed as a plain join rather than
+ * a recommendation model: the reactor must be someone the viewer actually
+ * follows, and the author must NOT be — otherwise it is first-degree content
+ * that the personActivity family already owns — and never the viewer
+ * themselves.
+ *
+ * DISTINCT ON keeps one row per activity (an activity can be reacted to by
+ * several followed people), choosing the reactor deterministically by name
+ * so the attributed context never changes between requests.
+ */
+async function findSecondDegreeActivities(followedUserIds, viewerUserId, sessionId = null) {
+  if (followedUserIds.length === 0) return [];
+  const { rows } = await query(
+    `SELECT * FROM (
+       SELECT DISTINCT ON (a.id)
+         a.id,
+         a.user_id,
+         u.display_name AS person_name,
+         to_char(a.occurred_on, 'YYYY-MM-DD') AS occurred_on,
+         a.hours,
+         a.story,
+         a.image_url,
+         a.manual_title,
+         a.manual_organization_name,
+         o.id AS opportunity_id,
+         o.title AS opportunity_title,
+         ho.name AS opportunity_org_name,
+         oc.name AS opportunity_cause_name,
+         mc.name AS manual_cause_name,
+         r.reaction_type,
+         ru.id AS reactor_id,
+         ru.display_name AS reactor_name
+       FROM reactions r
+       JOIN users ru ON ru.id = r.user_id
+       JOIN activities a ON a.id = r.activity_id
+       JOIN users u ON u.id = a.user_id
+       LEFT JOIN registrations reg ON reg.id = a.registration_id
+       LEFT JOIN opportunities o ON o.id = reg.opportunity_id
+       LEFT JOIN organizations ho ON ho.id = o.host_organization_id
+       LEFT JOIN causes oc ON oc.id = o.cause_id
+       LEFT JOIN causes mc ON mc.id = a.manual_cause_id
+       WHERE r.activity_id IS NOT NULL
+         AND r.user_id = ANY($1::uuid[])
+         AND a.user_id <> ALL($1::uuid[])
+         AND a.user_id <> $2
+         AND ${visibleUserPredicate('u', '$3')}
+         AND ${visibleUserPredicate('ru', '$3')}
+       ORDER BY a.id, ru.display_name ASC, r.id ASC
+     ) second_degree
+     ORDER BY occurred_on DESC, id ASC
+     LIMIT 50`,
+    [followedUserIds, viewerUserId, sessionId]
+  );
+  return rows;
+}
+
 module.exports = {
   findFollowedUserIds,
+  findSecondDegreeActivities,
   findFollowedOrganizationIds,
   findCauseIds,
   findFollowedPersonUpcoming,

@@ -58,7 +58,16 @@ const OPPORTUNITY_SELECT = `
       WHERE vrr.opportunity_id = o.id
         AND vrr.status = 'joined'
         AND vru.demo_session_id = ${SESSION_PARAM}
-    ) AS viewer_joined
+    ) AS viewer_joined,
+    -- Whether THIS viewer saved it. Same server-derived rule as
+    -- viewer_joined; another visitor's save is never visible here.
+    EXISTS (
+      SELECT 1
+      FROM saved_opportunities vs
+      JOIN users vsu ON vsu.id = vs.user_id
+      WHERE vs.opportunity_id = o.id
+        AND vsu.demo_session_id = ${SESSION_PARAM}
+    ) AS viewer_saved
   FROM opportunities o
   JOIN causes c ON c.id = o.cause_id
   LEFT JOIN users hu ON hu.id = o.host_user_id
@@ -527,9 +536,31 @@ async function insertOpportunity({
   );
 }
 
+/*
+ * The current visitor's saved opportunities. Scoped by session rather than
+ * by user id alone, the same rule findUpcomingForSession uses.
+ *
+ * Unlike Upcoming, this deliberately does NOT filter to future
+ * opportunities: Saved is a bookmark list the visitor curates, so an item
+ * stays until they remove it.
+ */
+async function findSavedForSession(sessionId, limit = 50) {
+  const { rows } = await query(
+    `${OPPORTUNITY_SELECT}
+     JOIN saved_opportunities s ON s.opportunity_id = o.id
+     JOIN users su ON su.id = s.user_id AND su.demo_session_id = ${SESSION_PARAM}
+     WHERE o.status = 'published' AND ${VISIBLE_OPPORTUNITY}
+     ORDER BY s.saved_at DESC, o.id ASC
+     LIMIT $2`,
+    [sessionId, limit]
+  );
+  return rows;
+}
+
 module.exports = {
   searchOpportunities,
   findOpportunityById,
+  findSavedForSession,
   resolveOpportunityInputs,
   insertOpportunity,
   joinOpportunity,

@@ -98,7 +98,9 @@ function Home() {
       </h1>
       <ul>
         {state.items.map((item) =>
-          item.family === 'personActivity' ? (
+          // Both activity-bearing families render the same way; the
+          // second-degree one just carries an extra attribution line.
+          item.family === 'personActivity' || item.family === 'secondDegree' ? (
             <ActivityFeedItem key={`activity-${item.activity.id}`} item={item} />
           ) : (
             <HomeFeedItem key={`opportunity-${item.opportunity.id}`} item={item} />

@@ -82,6 +82,8 @@ function toProductOpportunity(row, { attendees = [] } = {}) {
     // True only when THIS viewer holds a joined registration. Derived on the
     // server from the session; never inferred in the browser.
     viewerJoined: row.viewer_joined === true,
+    // Same rule as viewerJoined: derived on the server from the session.
+    viewerSaved: row.viewer_saved === true,
     // The single source of truth for "does this opportunity get the
     // early demo-completion path" — the allowlist itself lives only in
     // config/demo_completion.js. The frontend must read this field rather
@@ -177,6 +179,18 @@ async function listUpcomingForSession(sessionId) {
   return rows.map((row) =>
     toProductOpportunity(row, { attendees: previews.get(row.id) || [] })
   );
+}
+
+// The visitor's own saved opportunities, shaped like the cards Discover
+// already renders so Activity can reuse them.
+async function listSavedForSession(sessionId) {
+  const rows = await opportunitiesQueries.findSavedForSession(sessionId);
+  const previews = await opportunitiesQueries.findAttendeePreviewsFor(
+    rows.map((row) => row.id),
+    CARD_ATTENDEE_PREVIEW,
+    sessionId
+  );
+  return rows.map((row) => toProductOpportunity(row, { attendees: previews.get(row.id) || [] }));
 }
 
 // Joined, ended, not-yet-completed opportunities — the normal
@@ -315,6 +329,7 @@ module.exports = {
   joinOpportunity,
   listUpcomingForSession,
   listAwaitingConfirmationForSession,
+  listSavedForSession,
   commitmentBand,
   durationMinutes,
 };

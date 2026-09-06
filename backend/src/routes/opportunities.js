@@ -3,6 +3,7 @@
 const express = require('express');
 const opportunitiesService = require('../services/opportunities');
 const activitiesService = require('../services/activities');
+const socialService = require('../services/social');
 const { parseUuidParam } = require('../lib/uuid');
 const { parsePaginationParams } = require('../lib/pagination');
 const { parseDiscoveryParams } = require('../lib/discovery');
@@ -87,6 +88,39 @@ router.post('/:id/join', requireDemoSession(), async (req, res, next) => {
   try {
     const id = parseUuidParam(req.params.id, 'opportunity id');
     const result = await opportunitiesService.joinOpportunity({
+      opportunityId: id,
+      sessionId: req.demo.sessionId,
+      userId: req.demo.user.id,
+    });
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/*
+ * Save is a bookmark, not participation: no capacity, no social proof, no
+ * effect on anyone else. Idempotent in both directions, and the acting user
+ * comes from the session like every other write.
+ */
+router.post('/:id/save', requireDemoSession(), async (req, res, next) => {
+  try {
+    const id = parseUuidParam(req.params.id, 'opportunity id');
+    const result = await socialService.saveOpportunity({
+      opportunityId: id,
+      sessionId: req.demo.sessionId,
+      userId: req.demo.user.id,
+    });
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/:id/save', requireDemoSession(), async (req, res, next) => {
+  try {
+    const id = parseUuidParam(req.params.id, 'opportunity id');
+    const result = await socialService.unsaveOpportunity({
       opportunityId: id,
       sessionId: req.demo.sessionId,
       userId: req.demo.user.id,

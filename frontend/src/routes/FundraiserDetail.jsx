@@ -9,6 +9,7 @@ import Skeleton, { SkeletonText } from '../components/ui/Skeleton';
 import ErrorState from '../components/ui/ErrorState';
 import FundraiserProgress from '../components/fundraiser/FundraiserProgress';
 import SupportAction from '../components/fundraiser/SupportAction';
+import EngagementBar from '../components/social/EngagementBar';
 import { fetchFundraiser } from '../api/client';
 import { fundraiserImage, avatarImage } from '../lib/media';
 import { causeColor } from '../lib/causes';
@@ -156,6 +157,13 @@ function FundraiserDetail() {
           onSupported={(updated) => setState({ status: 'ready', fundraiser: updated })}
         />
       </div>
+
+      <EngagementBar
+        targetType="fundraisers"
+        targetId={f.id}
+        shareTitle={f.title}
+        className="mt-6"
+      />
 
       <div className="mt-7 border-t border-line pt-6">
         <h2 className="text-[13px] font-bold uppercase tracking-[0.07em] text-ink-subtle">

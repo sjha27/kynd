@@ -30,10 +30,18 @@ const support = (id, sessionId, body) =>
 const createFundraiser = (sessionId, body) =>
   request(app).post('/api/v1/fundraisers').set('X-Kynd-Session-Id', sessionId).send(body);
 
+/*
+ * Offsets from today's ATLANTA calendar date, not the process's UTC date.
+ * The backend compares end dates against the Atlanta calendar, so a UTC-based
+ * helper would disagree with it for the hours each evening when the two dates
+ * differ — exactly where the inDays(0)/inDays(1) boundary cases live.
+ */
 function inDays(n) {
-  const d = new Date();
-  d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(
+    new Date()
+  );
+  const [y, m, d] = today.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
 }
 
 const VALID = {

@@ -9,6 +9,8 @@ import OrgMark from '../components/ui/OrgMark';
 import Skeleton, { SkeletonText } from '../components/ui/Skeleton';
 import ErrorState from '../components/ui/ErrorState';
 import Button from '../components/ui/Button';
+import SaveAction from '../components/social/SaveAction';
+import EngagementBar from '../components/social/EngagementBar';
 import { opportunityImage, avatarImage } from '../lib/media';
 import { causeColor } from '../lib/causes';
 import { formatDayRange, formatDuration, formatLocation, isScarce } from '../lib/format';
@@ -141,7 +143,7 @@ function JoinAction({ opportunity, past, onJoined }) {
 
   if (past) {
     return (
-      <div className="mt-6 rounded-2xl border border-line bg-surface-sunken px-5 py-4">
+      <div className="w-full rounded-2xl border border-line bg-surface-sunken px-5 py-4">
         <p className="text-[14px] text-ink-muted">This opportunity has already taken place.</p>
       </div>
     );
@@ -149,7 +151,7 @@ function JoinAction({ opportunity, past, onJoined }) {
 
   if (joined) {
     return (
-      <div className="mt-6 flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <span className="inline-flex items-center gap-2 rounded-control bg-cause-sage px-4 py-2.5 text-sm font-semibold text-white">
           <Check className="h-4 w-4" strokeWidth={2.6} aria-hidden="true" />
           Joined
@@ -162,7 +164,7 @@ function JoinAction({ opportunity, past, onJoined }) {
   }
 
   return (
-    <div className="mt-6">
+    <div>
       <Button onClick={join} disabled={pending || full} className="min-w-[140px]">
         {pending ? 'Joining…' : full ? 'Full' : 'Join'}
       </Button>
@@ -347,23 +349,33 @@ function OpportunityDetail() {
           </p>
         )}
 
-        <JoinAction
-          opportunity={o}
-          past={past}
-          onJoined={(result) =>
-            setState((prev) => ({
-              ...prev,
-              opportunity: {
-                ...prev.opportunity,
-                viewerJoined: true,
-                participants: {
-                  ...prev.opportunity.participants,
-                  joined: result.participantCount,
-                  available: result.availableSpots,
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <JoinAction
+            opportunity={o}
+            past={past}
+            onJoined={(result) =>
+              setState((prev) => ({
+                ...prev,
+                opportunity: {
+                  ...prev.opportunity,
+                  viewerJoined: true,
+                  participants: {
+                    ...prev.opportunity.participants,
+                    joined: result.participantCount,
+                    available: result.availableSpots,
+                  },
                 },
-              },
-            }))
-          }
+              }))
+            }
+          />
+          <SaveAction opportunity={o} variant="button" />
+        </div>
+
+        <EngagementBar
+          targetType="opportunities"
+          targetId={o.id}
+          shareTitle={o.title}
+          className="mt-7"
         />
 
         {participants.preview.length > 0 && (

@@ -54,14 +54,16 @@ describe('Home feed', () => {
     expect(res.body.error.code).toBe('demo_session_invalid');
   });
 
-  it('gives a fresh Frank a finite personalized feed of at most 8 items', async () => {
+  it('gives a fresh Frank a finite personalized feed of at most 9 items', async () => {
     const { sessionId } = await newSession();
     const res = await home(sessionId);
 
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.items)).toBe(true);
     expect(res.body.items.length).toBeGreaterThan(0);
-    expect(res.body.items.length).toBeLessThanOrEqual(8);
+    // 9 since Social Engagement appended the second-degree discovery slot;
+    // the feed stays finite and ends with "You're caught up".
+    expect(res.body.items.length).toBeLessThanOrEqual(9);
   });
 
   it('surfaces the flagship within the first 3 items, without any UUID pinning in the request', async () => {

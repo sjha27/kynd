@@ -11,24 +11,15 @@ import CompleteAction from '../components/activity/CompleteAction';
 import CompletedActivityCard from '../components/activity/CompletedActivityCard';
 import { fetchActivity } from '../api/client';
 
-/*
- * Saved stays an honest placeholder until its own slice. Upcoming and
- * Completed are both real now.
- */
-const SAVED_TAB = {
-  key: 'saved',
-  label: 'Saved',
-  icon: Bookmark,
-  title: 'Nothing saved',
-  description: 'Keep track of what you are considering and come back when you are ready.',
-};
+// All three tabs are real now.
+const SAVED_TAB = { key: 'saved', label: 'Saved', icon: Bookmark };
 
 /*
  * Shared load: both Upcoming and Completed come from the same endpoint, and
  * completing an opportunity moves it from one list to the other, so a
  * successful completion refetches both rather than mutating local state.
  */
-const EMPTY_ACTIVITY = { upcoming: [], completed: [], awaitingConfirmation: [] };
+const EMPTY_ACTIVITY = { upcoming: [], completed: [], awaitingConfirmation: [], saved: [] };
 
 function useActivity() {
   const [state, setState] = useState({ status: 'loading', ...EMPTY_ACTIVITY });
@@ -44,6 +35,7 @@ function useActivity() {
           upcoming: body.upcoming,
           completed: body.completed,
           awaitingConfirmation: body.awaitingConfirmation,
+          saved: body.saved,
         })
       )
       .catch((err) => {
@@ -62,7 +54,9 @@ function useActivity() {
 
   useEffect(load, [load]);
 
-  return { state, reload: load };
+  // setState is exposed so Saved can drop a card the visitor just unsaved
+  // without a full refetch of every tab.
+  return { state, setState, reload: load };
 }
 
 function Upcoming({ items, awaitingConfirmation, status, onReload }) {
@@ -183,12 +177,70 @@ function Completed({ items, status, onReload }) {
   );
 }
 
+/*
+ * Saved is a bookmark list the visitor curates, so unsaving removes the card
+ * immediately rather than waiting for a refetch — the item is gone because
+ * they just removed it, and leaving it sitting there would read as a bug.
+ */
+function Saved({ items, status, onReload, onUnsaved }) {
+  const navigate = useNavigate();
+
+  if (status === 'loading' && items.length === 0) {
+    return (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <OpportunityCardSkeleton key={i} />
+        ))}
+      </div>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <ErrorState
+        title="We couldn't load your saved list"
+        description="The connection dropped or the service is waking up. Try again in a moment."
+        onRetry={onReload}
+      />
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <EmptyState
+        icon={Bookmark}
+        title="Nothing saved"
+        description="Keep track of what you are considering and come back when you are ready."
+        action={
+          <Button variant="secondary" onClick={() => navigate('/discover')}>
+            Browse opportunities
+          </Button>
+        }
+      />
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {items.map((opportunity) => (
+        <OpportunityCard
+          key={opportunity.id}
+          opportunity={opportunity}
+          onSaveChange={(saved) => {
+            if (!saved) onUnsaved(opportunity.id);
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function Activity() {
   // Logging an activity lands here on Completed, where the new entry is —
   // rather than on Upcoming, which has nothing to do with what just happened.
   const location = useLocation();
   const [active, setActive] = useState(location.state?.tab ?? 'upcoming');
-  const { state, reload } = useActivity();
+  const { state, setState, reload } = useActivity();
 
   const TABS = [
     { key: 'upcoming', label: 'Upcoming', icon: CalendarCheck },
@@ -235,7 +287,14 @@ function Activity() {
           <Completed items={state.completed} status={state.status} onReload={reload} />
         )}
         {active === 'saved' && (
-          <EmptyState icon={SAVED_TAB.icon} title={SAVED_TAB.title} description={SAVED_TAB.description} />
+          <Saved
+            items={state.saved}
+            status={state.status}
+            onReload={reload}
+            onUnsaved={(id) =>
+              setState((prev) => ({ ...prev, saved: prev.saved.filter((o) => o.id !== id) }))
+            }
+          />
         )}
       </div>
     </PageContainer>

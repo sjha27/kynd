@@ -3,7 +3,15 @@
 const homeQueries = require('../db/queries/home');
 const opportunitiesService = require('./opportunities');
 
-const FEED_SIZE = 8;
+const FEED_SIZE = 9;
+
+// like -> "Liked by Maya". The verb states what actually happened rather
+// than flattening every reaction into a generic "engaged with".
+const REACTION_VERB = {
+  like: 'Liked',
+  celebrate: 'Celebrated',
+  support: 'Supported',
+};
 
 /*
  * A deterministic V1 composition, not a ranking engine: a fixed slot plan,
@@ -21,13 +29,24 @@ const SLOT_PLAN = [
   'personUpcoming',
   'orgOpportunity',
   'causeDiscovery',
+  // Second-degree discovery is APPENDED rather than replacing an existing
+  // slot, so the established composition of the first eight is untouched and
+  // first-degree people/organization content keeps exactly the share it had.
+  // It sits last because it is the furthest from the viewer's own graph.
+  'secondDegree',
 ];
 
+/*
+ * secondDegree is added only at the END of each existing fallback list, so
+ * it can fill a gap when a family runs dry but can never displace content
+ * that would otherwise have been chosen.
+ */
 const FALLBACK_ORDER = {
-  personUpcoming: ['orgOpportunity', 'personActivity', 'causeDiscovery'],
-  personActivity: ['personUpcoming', 'orgOpportunity', 'causeDiscovery'],
-  orgOpportunity: ['personUpcoming', 'personActivity', 'causeDiscovery'],
-  causeDiscovery: ['personUpcoming', 'orgOpportunity', 'personActivity'],
+  personUpcoming: ['orgOpportunity', 'personActivity', 'causeDiscovery', 'secondDegree'],
+  personActivity: ['personUpcoming', 'orgOpportunity', 'causeDiscovery', 'secondDegree'],
+  orgOpportunity: ['personUpcoming', 'personActivity', 'causeDiscovery', 'secondDegree'],
+  causeDiscovery: ['personUpcoming', 'orgOpportunity', 'personActivity', 'secondDegree'],
+  secondDegree: ['causeDiscovery', 'personUpcoming', 'orgOpportunity', 'personActivity'],
 };
 
 // Additional signals within the personUpcoming family only ever break ties
@@ -81,13 +100,25 @@ function personKey(candidate) {
   return candidate.people.map((p) => p.id).join(',');
 }
 
-function activityToFeedItem(row) {
+// Both families carry an activity row, so they share dedup and
+// person-diversity handling.
+function isActivityFamily(poolKey) {
+  return poolKey === 'personActivity' || poolKey === 'secondDegree';
+}
+
+function activityToFeedItem(row, family = 'personActivity') {
   const title = row.opportunity_title || row.manual_title;
   const organizationName = row.opportunity_org_name || row.manual_organization_name || null;
   const causeName = row.opportunity_cause_name || row.manual_cause_name || null;
   return {
-    family: 'personActivity',
+    family,
     header: `${row.person_name} volunteered`,
+    // Truthful attribution for second-degree content: the person the viewer
+    // actually follows, and what they actually did. Absent for first-degree.
+    context:
+      family === 'secondDegree'
+        ? `${REACTION_VERB[row.reaction_type] ?? 'Liked'} by ${row.reactor_name}`
+        : null,
     person: { id: row.user_id, name: row.person_name },
     activity: {
       id: row.id,
@@ -120,7 +151,7 @@ async function buildHomeFeed({ sessionId, userId }) {
     homeQueries.findCauseIds(userId),
   ]);
 
-  const [personUpcomingRows, personActivityRows, orgOpportunityRows, causeRows] =
+  const [personUpcomingRows, personActivityRows, orgOpportunityRows, causeRows, secondDegreeRows] =
     await Promise.all([
       homeQueries.findFollowedPersonUpcoming(followedUserIds, followedOrgIds, causeIds),
       homeQueries.findFollowedPersonActivities(followedUserIds),
@@ -131,6 +162,7 @@ async function buildHomeFeed({ sessionId, userId }) {
         followedOrgIds,
         sessionId
       ),
+      homeQueries.findSecondDegreeActivities(followedUserIds, userId, sessionId),
     ]);
 
   const pools = {
@@ -138,6 +170,9 @@ async function buildHomeFeed({ sessionId, userId }) {
     personActivity: diversifyActivitiesByPerson(personActivityRows),
     orgOpportunity: sortByStartsAt(orgOpportunityRows),
     causeDiscovery: causeRows, // already ordered by the query itself
+    // Round-robin by author for the same reason the first-degree family
+    // does it: one prolific person shouldn't own the discovery slot.
+    secondDegree: diversifyActivitiesByPerson(secondDegreeRows),
   };
 
   const usedOpportunityIds = new Set();
@@ -173,11 +208,11 @@ async function buildHomeFeed({ sessionId, userId }) {
     // the family (most-recent-per-person round robin) is untouched —
     // this only reorders when the two adjacent feed items would
     // otherwise repeat the same person.
-    if (poolKey === 'personActivity' && lastPick) {
+    if (isActivityFamily(poolKey) && lastPick) {
       const lastPersonId =
         lastPick.poolKey === 'personUpcoming'
           ? lastPick.candidate.people[0]?.id
-          : lastPick.poolKey === 'personActivity'
+          : isActivityFamily(lastPick.poolKey)
             ? lastPick.candidate.user_id
             : null;
       if (lastPersonId) {
@@ -193,7 +228,10 @@ async function buildHomeFeed({ sessionId, userId }) {
 
     while (pool.length > 0) {
       const candidate = pool.shift();
-      if (poolKey === 'personActivity') {
+      // Activity-level dedup applies across BOTH activity-bearing families,
+      // so a second-degree item can never repeat an activity the
+      // first-degree family already claimed.
+      if (isActivityFamily(poolKey)) {
         if (usedActivityIds.has(candidate.id)) continue;
         usedActivityIds.add(candidate.id);
         return { poolKey, candidate };
@@ -223,8 +261,8 @@ async function buildHomeFeed({ sessionId, userId }) {
 
   const items = [];
   for (const { poolKey, candidate } of picks) {
-    if (poolKey === 'personActivity') {
-      items.push(activityToFeedItem(candidate));
+    if (isActivityFamily(poolKey)) {
+      items.push(activityToFeedItem(candidate, poolKey));
       continue;
     }
 

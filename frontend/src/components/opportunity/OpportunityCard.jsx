@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import { MapPin, Clock, BadgeCheck } from 'lucide-react';
 import Photo from '../ui/Photo';
+import SaveAction from '../social/SaveAction';
 import Avatar from '../ui/Avatar';
 import OrgMark from '../ui/OrgMark';
 import AttendeeStack from './AttendeeStack';
@@ -17,9 +18,10 @@ import { cardVariants, SPRING, TRANSITION } from '../../lib/motion';
  * The whole card is one link — no redundant "View" button competing with
  * it — which also keeps it a single tab stop.
  *
- * Join and Save are deliberately absent; they arrive with their own slices.
+ * Join is deliberately absent — the journey stays card -> detail -> Join.
+ * Save is here because a bookmark is a browsing decision, not a commitment.
  */
-function OpportunityCard({ opportunity, className = '' }) {
+function OpportunityCard({ opportunity, className = '', onSaveChange }) {
   const { title, cause, host, timing, location, participants, capacity } = opportunity;
   const image = opportunityImage(opportunity);
   const scarce = isScarce({ available: participants.available, capacity });
@@ -62,6 +64,12 @@ function OpportunityCard({ opportunity, className = '' }) {
           >
             {cause.name}
           </span>
+          {/* Save sits on the photo, the one place a bookmark belongs on a
+              card: reachable while browsing without competing with the
+              card's own tap target. */}
+          <div className="absolute right-3 top-3">
+            <SaveAction opportunity={opportunity} onChange={onSaveChange} />
+          </div>
         </div>
 
         <div className="flex flex-1 flex-col p-4">

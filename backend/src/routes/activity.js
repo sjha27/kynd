@@ -10,9 +10,7 @@ const router = express.Router();
 /*
  * The current visitor's Activity.
  *
- * Upcoming and Completed are both real in this slice; Saved is still
- * deliberately absent rather than stubbed as an empty array, which would
- * claim behavior that doesn't exist.
+ * Upcoming, Completed and Saved are all real now.
  *
  * awaitingConfirmation is the normal "Did you participate?" state: a joined
  * opportunity whose real end has passed but which has no activity yet. It
@@ -25,12 +23,13 @@ const router = express.Router();
  */
 router.get('/', requireDemoSession(), async (req, res, next) => {
   try {
-    const [upcoming, completed, awaitingConfirmation] = await Promise.all([
+    const [upcoming, completed, awaitingConfirmation, saved] = await Promise.all([
       opportunitiesService.listUpcomingForSession(req.demo.sessionId),
       activitiesService.listCompletedForSession(req.demo.sessionId),
       opportunitiesService.listAwaitingConfirmationForSession(req.demo.sessionId),
+      opportunitiesService.listSavedForSession(req.demo.sessionId),
     ]);
-    res.json({ upcoming, completed, awaitingConfirmation });
+    res.json({ upcoming, completed, awaitingConfirmation, saved });
   } catch (err) {
     next(err);
   }
