@@ -4,6 +4,7 @@ import KyndMark from '../brand/KyndMark';
 import NavItem from './NavItem';
 import { NAV_ITEMS } from '../../lib/nav';
 import ResetDemo from '../demo/ResetDemo';
+import DemoFooterLinks from '../demo/DemoFooterLinks';
 
 /*
  * Left rail: light, chrome-free, sitting directly on the cream frame.
@@ -59,6 +60,7 @@ function DesktopNav() {
           competing with the product's own actions. */}
       <div className="mt-auto pt-6">
         <ResetDemo />
+        <DemoFooterLinks className="mt-3.5" />
       </div>
     </nav>
   );

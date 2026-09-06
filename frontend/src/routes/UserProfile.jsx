@@ -9,6 +9,7 @@ import ShareAction from '../components/social/ShareAction';
 import ProfileMetrics from '../components/profile/ProfileMetrics';
 import ImpactHistory from '../components/profile/ImpactHistory';
 import ResetDemo from '../components/demo/ResetDemo';
+import DemoFooterLinks from '../components/demo/DemoFooterLinks';
 import { fetchUserProfile, followUser, unfollowUser } from '../api/client';
 import { causeColor } from '../lib/causes';
 import { avatarImage } from '../lib/media';
@@ -184,6 +185,7 @@ function UserProfile({ id: idProp }) {
           {isSelf && (
             <div className="mt-8 border-t border-line pt-5 lg:hidden">
               <ResetDemo />
+              <DemoFooterLinks className="mt-3.5" />
             </div>
           )}
         </header>

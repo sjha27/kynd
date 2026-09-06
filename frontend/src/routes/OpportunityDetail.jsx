@@ -11,6 +11,7 @@ import ErrorState from '../components/ui/ErrorState';
 import Button from '../components/ui/Button';
 import SaveAction from '../components/social/SaveAction';
 import LeaveAction from '../components/opportunity/LeaveAction';
+import { OpportunityDemoNotice } from '../components/demo/DemoNotice';
 import EngagementBar from '../components/social/EngagementBar';
 import { opportunityImage, avatarImage } from '../lib/media';
 import { causeColor } from '../lib/causes';
@@ -354,7 +355,11 @@ function OpportunityDetail() {
           </p>
         )}
 
-        <div className="mt-6 flex flex-wrap items-center gap-3">
+        {/* Above the Join control, because that is the moment a visitor
+            could otherwise believe this is a real event they can attend. */}
+        <OpportunityDemoNotice className="mt-6" />
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
           <JoinAction
             opportunity={o}
             past={past}

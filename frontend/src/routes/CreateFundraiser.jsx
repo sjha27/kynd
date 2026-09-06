@@ -6,6 +6,7 @@ import Button from '../components/ui/Button';
 import { CAUSES } from '../lib/causes';
 import { todayInAtlanta } from '../lib/format';
 import { createFundraiser } from '../api/client';
+import { SensitiveInfoNotice } from '../components/demo/DemoNotice';
 
 /*
  * Starting a fundraiser.
@@ -175,6 +176,8 @@ function CreateFundraiser() {
             />
           </Field>
         </div>
+
+        <SensitiveInfoNotice />
 
         {error && (
           <p role="alert" className="text-[14px] text-accent">

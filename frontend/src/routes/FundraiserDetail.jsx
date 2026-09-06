@@ -10,6 +10,7 @@ import ErrorState from '../components/ui/ErrorState';
 import FundraiserProgress from '../components/fundraiser/FundraiserProgress';
 import SupportAction from '../components/fundraiser/SupportAction';
 import EngagementBar from '../components/social/EngagementBar';
+import { FundraiserDemoNotice } from '../components/demo/DemoNotice';
 import { fetchFundraiser } from '../api/client';
 import { fundraiserImage, avatarImage } from '../lib/media';
 import { causeColor } from '../lib/causes';
@@ -151,7 +152,11 @@ function FundraiserDetail() {
         <FundraiserProgress fundraiser={f} size="lg" />
       </div>
 
-      <div className="mt-5">
+      {/* Immediately above Support, which is the one interaction a visitor
+          could mistake for giving real money. */}
+      <FundraiserDemoNotice className="mt-5" />
+
+      <div className="mt-3">
         <SupportAction
           fundraiser={f}
           onSupported={(updated) => setState({ status: 'ready', fundraiser: updated })}

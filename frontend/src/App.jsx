@@ -13,6 +13,9 @@ import OpportunityDetail from './routes/OpportunityDetail';
 import UserProfile from './routes/UserProfile';
 import OrganizationDetail from './routes/OrganizationDetail';
 import DevStatus from './routes/DevStatus';
+import DemoInfo from './routes/DemoInfo';
+import Privacy from './routes/Privacy';
+import Terms from './routes/Terms';
 
 function App() {
   return (
@@ -30,6 +33,9 @@ function App() {
         <Route path="/create/log" element={<LogActivity />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/demo-info" element={<DemoInfo />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
         <Route path="/dev/status" element={<DevStatus />} />
       </Route>
     </Routes>

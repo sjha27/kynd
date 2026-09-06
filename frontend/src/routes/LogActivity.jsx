@@ -6,6 +6,7 @@ import Button from '../components/ui/Button';
 import { CAUSES } from '../lib/causes';
 import { todayInAtlanta } from '../lib/format';
 import { logActivity } from '../api/client';
+import { SensitiveInfoNotice } from '../components/demo/DemoNotice';
 
 /*
  * Manual activity logging.
@@ -171,6 +172,8 @@ function LogActivity() {
             className={`${FIELD_CLASSES} resize-none leading-relaxed`}
           />
         </Field>
+
+        <SensitiveInfoNotice />
 
         {error && (
           <p role="alert" className="text-[14px] text-accent">

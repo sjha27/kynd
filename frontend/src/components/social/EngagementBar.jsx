@@ -4,6 +4,7 @@ import Avatar from '../ui/Avatar';
 import ShareAction from './ShareAction';
 import { fetchEngagement, reactToContent, commentOnContent } from '../../api/client';
 import { avatarImage } from '../../lib/media';
+import { SensitiveInfoNotice } from '../demo/DemoNotice';
 
 /*
  * The social layer for one piece of content, wherever it appears.
@@ -170,6 +171,10 @@ function EngagementBar({ targetType, targetId, shareTitle, className = '' }) {
               Post
             </button>
           </form>
+
+          {/* Shown only while the composer is open, so the reminder appears
+              exactly when someone is about to type something stored. */}
+          <SensitiveInfoNotice className="mt-2" />
 
           {error && (
             <p role="alert" className="mt-2 text-[13px] text-accent">

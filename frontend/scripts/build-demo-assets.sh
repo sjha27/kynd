@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 #
-# Builds shippable demo media from the owner-supplied source photography in
+# Builds shippable demo media from the source photography in
 # "Photos for Kynd/" at the repo root.
+#
+# All sources are third-party stock from Pexels, used under the Pexels
+# License. See ASSETS.md at the repo root for provenance.
 #
 # The source files are 3840x2160 to 4984x6229 and total ~81MB, which is far
 # too heavy to serve. This crops each one to Kynd's 16:9 card/hero ratio at
@@ -43,8 +46,8 @@ MAPPINGS=(
   "Kynd - Volunteering Environment 1|environment/tree-planting"
   "Kynd - Volunteering Environment 2|environment/garden-care"
 
-  "Kynd - Volunteering Food drive 1|food-hunger/food-drive"
-  "Kynd Volunteering Food Drive 2|food-hunger/meal-packing"
+  "Kynd - Food Drive (Pexels 6590931)|food-hunger/food-drive"
+  "Kynd - Meal Packing (Pexels 6591154)|food-hunger/meal-packing"
   "Kynd - Donation 1|food-hunger/donation-sorting"
   "Kynd - Donation 2|food-hunger/pantry-stocking"
   "Kynd - Donation 3|food-hunger/supply-collection"

@@ -6,6 +6,7 @@ import Button from '../components/ui/Button';
 import { CAUSES } from '../lib/causes';
 import { todayInAtlanta } from '../lib/format';
 import { createOpportunity } from '../api/client';
+import { SensitiveInfoNotice } from '../components/demo/DemoNotice';
 
 /*
  * Publishing an opportunity.
@@ -267,6 +268,8 @@ function CreateOpportunity() {
             className={`${FIELD_CLASSES} w-32`}
           />
         </Field>
+
+        <SensitiveInfoNotice />
 
         {error && (
           <p role="alert" className="text-[14px] text-accent">
