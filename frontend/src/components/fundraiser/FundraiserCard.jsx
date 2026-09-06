@@ -10,10 +10,11 @@ import { causeColor } from '../../lib/causes';
  * deciding — so the two objects read as members of one product rather than
  * two different apps.
  */
-function FundraiserCard({ fundraiser }) {
+function FundraiserCard({ fundraiser, source }) {
   return (
     <Link
       to={`/fundraisers/${fundraiser.id}`}
+      state={source ? { source } : undefined}
       className="group flex flex-col overflow-hidden rounded-2xl border border-line bg-surface transition-shadow hover:shadow-[0_2px_16px_rgba(0,0,0,0.07)]"
     >
       <Photo src={fundraiserImage(fundraiser)} alt="" ratio="3/2" />

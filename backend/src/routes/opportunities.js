@@ -7,6 +7,7 @@ const socialService = require('../services/social');
 const { parseUuidParam } = require('../lib/uuid');
 const { parsePaginationParams } = require('../lib/pagination');
 const { parseDiscoveryParams } = require('../lib/discovery');
+const { track, contextFrom, capacityBucket, SOURCES } = require('../lib/analytics');
 const { requireDemoSession, optionalDemoSession } = require('../middleware/session');
 
 const router = express.Router();
@@ -26,6 +27,31 @@ router.get('/', optionalDemoSession(), async (req, res, next) => {
       sessionId: req.demo?.sessionId ?? null,
       ...filters,
     });
+
+    /*
+     * Only when the visitor actually searched or filtered — an unfiltered
+     * browse is the Discover landing view, already reported by the frontend
+     * as discover_viewed, and firing here too would double-count it.
+     *
+     * filter_keys records WHICH filters were used, never their values, and
+     * has_query records only that a search happened. The search term itself
+     * is visitor free text and never leaves the database.
+     */
+    const filterKeys = Object.entries(filters)
+      .filter(([key, value]) => value !== null && key !== 'q' && key !== 'sort')
+      .map(([key]) => key);
+
+    if (filterKeys.length > 0 || filters.q) {
+      track(
+        'discover_query_used',
+        {
+          filter_keys: filterKeys,
+          has_query: Boolean(filters.q),
+          result_count: total,
+        },
+        contextFrom(req.demo)
+      );
+    }
 
     res.json({
       opportunities,
@@ -73,6 +99,17 @@ router.post('/', requireDemoSession(), async (req, res, next) => {
       state: req.body?.state,
       capacity: req.body?.capacity,
     });
+
+    track(
+      'content_created',
+      {
+        type: 'opportunity',
+        cause: opportunity.cause?.name ?? null,
+        is_online: opportunity.location?.isOnline === true,
+        capacity_bucket: capacityBucket(opportunity.capacity),
+      },
+      contextFrom(req.demo)
+    );
     res.status(201).json({ opportunity });
   } catch (err) {
     next(err);
@@ -87,11 +124,22 @@ router.post('/', requireDemoSession(), async (req, res, next) => {
 router.post('/:id/join', requireDemoSession(), async (req, res, next) => {
   try {
     const id = parseUuidParam(req.params.id, 'opportunity id');
-    const result = await opportunitiesService.joinOpportunity({
+    const { analytics, ...result } = await opportunitiesService.joinOpportunity({
       opportunityId: id,
       sessionId: req.demo.sessionId,
       userId: req.demo.user.id,
     });
+
+    // `source` is the one property the browser knows better than the
+    // server — which surface the visitor came from. Validated against the
+    // shared vocabulary, and dropped entirely if it isn't one of them.
+    const source = SOURCES.includes(req.body?.source) ? req.body.source : null;
+
+    track(
+      'opportunity_joined',
+      { opportunity_id: id, ...analytics, ...(source ? { source } : {}) },
+      contextFrom(req.demo)
+    );
     res.status(200).json(result);
   } catch (err) {
     next(err);
@@ -110,11 +158,17 @@ router.post('/:id/join', requireDemoSession(), async (req, res, next) => {
 router.delete('/:id/join', requireDemoSession(), async (req, res, next) => {
   try {
     const id = parseUuidParam(req.params.id, 'opportunity id');
-    const result = await opportunitiesService.leaveOpportunity({
+    const { analytics, ...result } = await opportunitiesService.leaveOpportunity({
       opportunityId: id,
       sessionId: req.demo.sessionId,
       userId: req.demo.user.id,
     });
+
+    track(
+      'opportunity_participation_changed',
+      { opportunity_id: id, state: 'left', ...analytics },
+      contextFrom(req.demo)
+    );
     res.status(200).json(result);
   } catch (err) {
     next(err);
@@ -134,6 +188,7 @@ router.post('/:id/save', requireDemoSession(), async (req, res, next) => {
       sessionId: req.demo.sessionId,
       userId: req.demo.user.id,
     });
+    track('opportunity_saved', { opportunity_id: id, state: 'saved' }, contextFrom(req.demo));
     res.status(200).json(result);
   } catch (err) {
     next(err);
@@ -148,6 +203,7 @@ router.delete('/:id/save', requireDemoSession(), async (req, res, next) => {
       sessionId: req.demo.sessionId,
       userId: req.demo.user.id,
     });
+    track('opportunity_saved', { opportunity_id: id, state: 'unsaved' }, contextFrom(req.demo));
     res.status(200).json(result);
   } catch (err) {
     next(err);
@@ -165,12 +221,16 @@ router.post('/:id/complete', requireDemoSession(), async (req, res, next) => {
     const hours = Number(req.body?.hours);
     const story = typeof req.body?.story === 'string' ? req.body.story.trim() || null : null;
 
-    const result = await activitiesService.completeOpportunity({
+    const { analytics, ...result } = await activitiesService.completeOpportunity({
       opportunityId: id,
       userId: req.demo.user.id,
       hours,
       story,
     });
+
+    // is_demo_path marks the flagship early-completion shortcut so it can be
+    // excluded from an honest Join -> Complete rate.
+    track('opportunity_completed', { opportunity_id: id, ...analytics }, contextFrom(req.demo));
     res.status(200).json(result);
   } catch (err) {
     next(err);

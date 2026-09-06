@@ -78,6 +78,18 @@ function DemoInfo() {
         </p>
       </Section>
 
+      <Section title="How usage is measured">
+        <p>
+          Kynd records a small set of product events &mdash; that an opportunity was viewed or
+          joined, for example &mdash; so its author can see how the demo is used. No third-party
+          analytics, no cookies, and nothing you type is ever recorded.{' '}
+          <Link to="/privacy" className="font-semibold text-brand underline underline-offset-2">
+            Privacy
+          </Link>{' '}
+          has the detail.
+        </p>
+      </Section>
+
       <Section title="Please don't enter anything sensitive">
         <p>
           This is a demonstration, not a private space. Please don&rsquo;t type personal, sensitive,
@@ -107,6 +119,7 @@ function DemoInfo() {
             'Fundraiser support is simulated — no payments, ever.',
             'Your temporary session expires after 24 hours and is visible only to you.',
             'No account, no password, no cookies set by Kynd.',
+            'Usage is measured with simple product events — never the text you write.',
           ]}
         />
       </Section>

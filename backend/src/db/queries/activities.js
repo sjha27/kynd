@@ -28,6 +28,7 @@ async function findRegistrationForCompletion(userId, opportunityId) {
        (SELECT 1 FROM activities a WHERE a.registration_id = r.id) IS NOT NULL AS already_completed
      FROM registrations r
      JOIN opportunities o ON o.id = r.opportunity_id
+     JOIN causes c ON c.id = o.cause_id
      WHERE r.user_id = $1 AND r.opportunity_id = $2`,
     [userId, opportunityId, LOCAL_TIMEZONE]
   );

@@ -4,6 +4,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 
 const demoSessionsService = require('../services/demo_sessions');
+const { track, contextFrom } = require('../lib/analytics');
 const { requireDemoSession } = require('../middleware/session');
 
 const router = express.Router();
@@ -34,6 +35,21 @@ const createSessionLimiter = rateLimit({
 router.post('/', createSessionLimiter, async (req, res, next) => {
   try {
     const session = await demoSessionsService.createDemoSession();
+
+    /*
+     * `is_reset` separates a fresh arrival from a visitor starting over,
+     * which matters because a recruiter resetting five times is one person
+     * exploring, not five funnels. Only the browser knows which this is —
+     * the new session shares nothing with the deleted one — so the flag is
+     * client-asserted and recorded as such in ANALYTICS.md. It is coerced
+     * to a strict boolean and influences nothing but this event.
+     */
+    track(
+      'demo_session_started',
+      { is_reset: req.body?.reset === true },
+      contextFrom({ sessionId: session.sessionId, user: session.user, expiresAt: session.expiresAt })
+    );
+
     res.status(201).json(session);
   } catch (err) {
     next(err);
@@ -64,7 +80,14 @@ router.get('/current', requireDemoSession(), (req, res) => {
  */
 router.delete('/current', requireDemoSession(), async (req, res, next) => {
   try {
+    // Captured BEFORE the delete, because the reset destroys the session
+    // this event describes. Emitted only after the delete succeeds, so a
+    // failed reset never reports one.
+    const ctx = contextFrom(req.demo);
+
     await demoSessionsService.resetDemoSession(req.demo.sessionId);
+
+    track('demo_reset', {}, ctx);
     res.status(204).end();
   } catch (err) {
     next(err);

@@ -21,7 +21,7 @@ import { cardVariants, SPRING, TRANSITION } from '../../lib/motion';
  * Join is deliberately absent — the journey stays card -> detail -> Join.
  * Save is here because a bookmark is a browsing decision, not a commitment.
  */
-function OpportunityCard({ opportunity, className = '', onSaveChange }) {
+function OpportunityCard({ opportunity, className = '', onSaveChange, source }) {
   const { title, cause, host, timing, location, participants, capacity } = opportunity;
   const image = opportunityImage(opportunity);
   const scarce = isScarce({ available: participants.available, capacity });
@@ -33,6 +33,9 @@ function OpportunityCard({ opportunity, className = '', onSaveChange }) {
   return (
     <Link
       to={`/opportunities/${opportunity.id}`}
+      // Declares which surface this card was rendered on, so the detail
+      // page can report how the visitor actually got there.
+      state={source ? { source } : undefined}
       className="group block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
     >
       {/*

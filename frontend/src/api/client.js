@@ -139,6 +139,25 @@ function fetchHome(options) {
 }
 
 /*
+ * The frontend event bridge.
+ *
+ * Only for the handful of things the browser knows and the server cannot —
+ * chiefly which surface a view came from. Deliberately fire-and-forget: an
+ * analytics call must never delay or break what the visitor is doing, so
+ * failures are swallowed and nothing awaits the result.
+ *
+ * The backend rejects any event name or property outside its allowlist, so
+ * this cannot become a general-purpose logging channel.
+ */
+function trackEvent(event, properties = {}) {
+  try {
+    apiPost('/api/v1/events', { body: { event, properties } }).catch(() => {});
+  } catch {
+    /* never surfaces to the visitor */
+  }
+}
+
+/*
  * The social layer for one piece of content. targetType is
  * activities | opportunities | fundraisers — the three targets the schema
  * allows. Writes never send a user: the actor comes from the session.
@@ -215,8 +234,14 @@ function unfollowOrganization(id, { signal } = {}) {
   return apiDelete(`/api/v1/organizations/${id}/follow`, { signal });
 }
 
-function createDemoSession(options) {
-  return apiPost('/api/v1/demo-sessions', options);
+/*
+ * `reset` tells the backend this session replaces one the visitor just
+ * cleared, which separates a fresh arrival from someone starting over. It
+ * is a claim about intent, not identity — the browser still supplies no
+ * session or user id — and it is recorded as client-asserted.
+ */
+function createDemoSession({ reset = false, ...options } = {}) {
+  return apiPost('/api/v1/demo-sessions', { ...options, body: { reset } });
 }
 
 function fetchCurrentDemoSession(options) {
@@ -243,6 +268,7 @@ export {
   completeOpportunity,
   fetchActivity,
   logActivity,
+  trackEvent,
   fetchEngagement,
   reactToContent,
   commentOnContent,

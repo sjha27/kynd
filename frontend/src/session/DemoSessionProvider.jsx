@@ -107,7 +107,7 @@ export function DemoSessionProvider({ children }) {
     clearStoredSessionId();
 
     try {
-      const session = await createDemoSession();
+      const session = await createDemoSession({ reset: true });
       writeStoredSessionId(session.sessionId);
       setState((prev) => ({ status: 'ready', session, resetKey: (prev.resetKey ?? 0) + 1 }));
     } catch (error) {

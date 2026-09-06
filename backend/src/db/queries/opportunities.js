@@ -325,8 +325,9 @@ async function joinOpportunity({ opportunityId, userId, sessionId }) {
     // hosted by another visitor's temporary user is not joinable even if its
     // id were somehow guessed, rather than relying on it being undiscoverable.
     const opportunity = await client.query(
-      `SELECT o.id, o.capacity, o.status, o.starts_at
+      `SELECT o.id, o.capacity, o.status, o.starts_at, c.name AS cause_name
        FROM opportunities o
+       JOIN causes c ON c.id = o.cause_id
        LEFT JOIN users hu ON hu.id = o.host_user_id
        WHERE o.id = $1 AND ${visibleOpportunityPredicate('o', 'hu', '$2')}`,
       [opportunityId, sessionId]
@@ -393,6 +394,7 @@ async function joinOpportunity({ opportunityId, userId, sessionId }) {
       capacity: row.capacity,
       joinedCount: after.rows[0].joined_count,
       alreadyJoined,
+      causeName: row.cause_name,
     };
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -423,8 +425,10 @@ async function leaveOpportunity({ opportunityId, userId, sessionId }) {
     await client.query('BEGIN');
 
     const opportunity = await client.query(
-      `SELECT o.id, o.capacity
+      `SELECT o.id, o.capacity, c.name AS cause_name,
+              GREATEST(EXTRACT(EPOCH FROM (o.starts_at - now())) / 3600, 0) AS hours_before_start
        FROM opportunities o
+       JOIN causes c ON c.id = o.cause_id
        LEFT JOIN users hu ON hu.id = o.host_user_id
        WHERE o.id = $1 AND ${visibleOpportunityPredicate('o', 'hu', '$2')}`,
       [opportunityId, sessionId]
@@ -433,7 +437,8 @@ async function leaveOpportunity({ opportunityId, userId, sessionId }) {
       await client.query('ROLLBACK');
       return { outcome: 'not_found' };
     }
-    const capacity = opportunity.rows[0].capacity;
+    const { capacity, cause_name: causeName, hours_before_start: hoursBeforeStart } =
+      opportunity.rows[0];
 
     const registration = await client.query(
       `SELECT r.id, r.status,
@@ -467,7 +472,13 @@ async function leaveOpportunity({ opportunityId, userId, sessionId }) {
     );
 
     await client.query('COMMIT');
-    return { outcome: 'left', capacity, joinedCount: after.rows[0].joined_count };
+    return {
+      outcome: 'left',
+      capacity,
+      joinedCount: after.rows[0].joined_count,
+      causeName,
+      hoursBeforeStart,
+    };
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     throw err;

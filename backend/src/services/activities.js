@@ -96,7 +96,17 @@ async function completeOpportunity({ opportunityId, userId, hours, story }) {
     story: story || null,
   });
 
-  return { completed: true };
+  return {
+    completed: true,
+    // Stripped by the route. is_demo_path is what lets the flagship's early
+    // completion shortcut be excluded from an honest completion rate.
+    analytics: {
+      cause: registration.cause_name,
+      hours,
+      has_story: Boolean(story),
+      is_demo_path: isDemoEarlyCompletion,
+    },
+  };
 }
 
 // Free-text fields go into unbounded TEXT columns, so they get sane
@@ -202,7 +212,18 @@ async function logManualActivity({ userId, title, causeName, organizationName, o
     story: (typeof story === 'string' && story.trim()) || null,
   });
 
-  return { logged: true, activityId: id };
+  return {
+    logged: true,
+    activityId: id,
+    // Only shapes, never the visitor's words: no title, no story text, and
+    // no externally-typed organization name.
+    analytics: {
+      cause: cleanCauseName,
+      hours,
+      org_is_kynd: Boolean(resolved.organization_id),
+      has_story: Boolean(typeof story === 'string' && story.trim()),
+    },
+  };
 }
 
 async function listCompletedForSession(sessionId) {

@@ -3,6 +3,7 @@
 const express = require('express');
 const fundraisersService = require('../services/fundraisers');
 const { parseUuidParam } = require('../lib/uuid');
+const { track, contextFrom, amountBucket } = require('../lib/analytics');
 const { requireDemoSession, optionalDemoSession } = require('../middleware/session');
 
 const router = express.Router();
@@ -55,6 +56,12 @@ router.post('/', requireDemoSession(), async (req, res, next) => {
       goalAmountCents: req.body?.goalAmountCents,
       endDate: req.body?.endDate,
     });
+
+    track(
+      'content_created',
+      { type: 'fundraiser', cause: fundraiser.cause?.name ?? null },
+      contextFrom(req.demo)
+    );
     res.status(201).json({ fundraiser });
   } catch (err) {
     next(err);
@@ -88,6 +95,17 @@ router.post('/:id/support', requireDemoSession(), async (req, res, next) => {
       sessionId: req.demo.sessionId,
       amountCents: req.body?.amountCents,
     });
+
+    // Bucketed, never the exact amount a specific visitor chose.
+    track(
+      'fundraiser_supported',
+      {
+        fundraiser_id: id,
+        cause: fundraiser.cause?.name ?? null,
+        amount_bucket: amountBucket(req.body?.amountCents),
+      },
+      contextFrom(req.demo)
+    );
     res.status(200).json({ supported: true, fundraiser });
   } catch (err) {
     next(err);

@@ -19,7 +19,7 @@ function Privacy() {
           items={[
             'There is no signup or login, and Kynd does not ask for your real name, email address, password, or other account credentials.',
             'You get a temporary demo account so the product can remember what you did while you explore.',
-            'Kynd sets no cookies and runs no analytics or advertising.',
+            'Kynd sets no cookies and uses no third-party tracking or advertising.',
             'Your demo activity is visible only to you.',
             'Please do not enter sensitive personal information into a demo.',
           ]}
@@ -152,18 +152,40 @@ function Privacy() {
         <p>Hosting providers keep their own operational logs, as described above.</p>
       </Section>
 
-      <Section title="Analytics and advertising">
+      <Section title="Product analytics">
         <p>
+          Kynd records a small set of structured product-interaction events so its author can
+          understand how the demo is used and demonstrate product measurement. There is{' '}
           <strong className="font-semibold text-ink">
-            Kynd currently runs no product analytics and no third-party tracking.
-          </strong>{' '}
-          There is no analytics SDK, no tracking pixel, no advertising network, and no
-          behavioural profiling.
+            no third-party analytics service, no tracking pixel, and no advertising network
+          </strong>
+          .
         </p>
         <p>
-          Analytics for this demo have been designed but are not implemented. If that changes, this
-          page will be updated before or when it ships, and will describe what is actually
-          collected.
+          Events record that something happened and a little context about it &mdash; for example
+          that an opportunity was viewed or joined, which cause it belonged to, which part of the
+          app you came from, or that a comment was added. They are written to the application
+          logs of Kynd&rsquo;s backend, which is hosted by Render.
+        </p>
+        <p>What events never contain:</p>
+        <Bullets
+          items={[
+            'The text you write — comments, activity stories, titles, or descriptions',
+            'What you type into search',
+            'Names of organizations you type in yourself',
+            'Exact fundraiser support amounts (a size range is recorded instead)',
+            'Your IP address or browser user-agent string',
+          ]}
+        />
+        <p>
+          Events are tied to your temporary demo-session identifier, which disappears with your
+          session. <strong className="font-semibold text-ink">No cookie or device identifier is
+          created</strong>, nothing follows you between sessions or across sites, and no profile of
+          you is built.
+        </p>
+        <p>
+          As with any application logging, how long Render retains those logs is governed by that
+          provider rather than by Kynd, so no specific retention period is promised here.
         </p>
         <p>
           Kynd does not sell information about visitors, and does not use visitor information for

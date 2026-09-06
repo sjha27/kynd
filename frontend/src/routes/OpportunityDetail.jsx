@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
 import { ArrowLeft, MapPin, Clock, CalendarDays, Users, BadgeCheck, Check } from 'lucide-react';
 import { fetchOpportunity, joinOpportunity } from '../api/client';
@@ -18,6 +18,7 @@ import { causeColor } from '../lib/causes';
 import { formatDayRange, formatDuration, formatLocation, isScarce } from '../lib/format';
 import { entrance } from '../lib/motion';
 import { useDemoSession } from '../session/DemoSessionProvider';
+import { resolveSource, trackOpportunityViewed } from '../lib/analytics';
 
 /*
  * Scroll-linked hero.
@@ -232,6 +233,8 @@ function AttendeeItem({ person, currentUserId }) {
 
 function OpportunityDetail() {
   const { id } = useParams();
+  // Named to avoid colliding with the opportunity's own `location`.
+  const routerLocation = useLocation();
   const { session } = useDemoSession();
   const reduced = useReducedMotion();
   const [state, setState] = useState({ status: 'loading', opportunity: null });
@@ -241,7 +244,12 @@ function OpportunityDetail() {
     setState({ status: 'loading', opportunity: null });
 
     fetchOpportunity(id, { signal: controller.signal })
-      .then((body) => setState({ status: 'ready', opportunity: body.opportunity }))
+      .then((body) => {
+        setState({ status: 'ready', opportunity: body.opportunity });
+        // Reported from here rather than the server so the surface the
+        // visitor came from travels with the view.
+        trackOpportunityViewed(body.opportunity, resolveSource(routerLocation.state));
+      })
       .catch((err) => {
         if (err.name === 'AbortError') return;
         setState({ status: 'error', opportunity: null });

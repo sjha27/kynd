@@ -4,6 +4,7 @@ import Avatar from '../ui/Avatar';
 import OrgMark from '../ui/OrgMark';
 import OpportunityCard from '../opportunity/OpportunityCard';
 import { avatarImage } from '../../lib/media';
+import { sourceForHomeFamily } from '../../lib/analytics';
 
 /*
  * Renders the three opportunity-shaped feed families (personUpcoming,
@@ -51,7 +52,7 @@ function HomeFeedItem({ item }) {
         )}
       </div>
 
-      <OpportunityCard opportunity={opportunity} />
+      <OpportunityCard opportunity={opportunity} source={sourceForHomeFamily(family)} />
     </li>
   );
 }

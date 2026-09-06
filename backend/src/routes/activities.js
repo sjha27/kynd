@@ -2,6 +2,7 @@
 
 const express = require('express');
 const activitiesService = require('../services/activities');
+const { track, contextFrom } = require('../lib/analytics');
 const { requireDemoSession } = require('../middleware/session');
 
 const router = express.Router();
@@ -19,7 +20,7 @@ const router = express.Router();
  */
 router.post('/', requireDemoSession(), async (req, res, next) => {
   try {
-    const result = await activitiesService.logManualActivity({
+    const { analytics, ...result } = await activitiesService.logManualActivity({
       userId: req.demo.user.id,
       title: req.body?.title,
       causeName: req.body?.causeName,
@@ -28,6 +29,8 @@ router.post('/', requireDemoSession(), async (req, res, next) => {
       hours: Number(req.body?.hours),
       story: req.body?.story,
     });
+
+    track('activity_logged', analytics, contextFrom(req.demo));
     res.status(201).json(result);
   } catch (err) {
     next(err);

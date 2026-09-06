@@ -164,6 +164,9 @@ async function joinOpportunity({ opportunityId, sessionId, userId }) {
     capacity: result.capacity,
     participantCount: result.joinedCount,
     availableSpots: Math.max(result.capacity - result.joinedCount, 0),
+    // Stripped by the route before the response — carried here only so the
+    // funnel can be segmented by cause without a second query.
+    analytics: { cause: result.causeName, was_rejoin: result.alreadyJoined === true },
   };
 }
 
@@ -196,6 +199,15 @@ async function leaveOpportunity({ opportunityId, sessionId, userId }) {
     capacity: result.capacity,
     participantCount: result.joinedCount,
     availableSpots: Math.max(result.capacity - result.joinedCount, 0),
+    analytics: {
+      cause: result.causeName,
+      // How far ahead of the start someone dropped out — a marketplace
+      // health signal. Rounded; the exact second carries no meaning.
+      hours_before_start:
+        result.hoursBeforeStart === null || result.hoursBeforeStart === undefined
+          ? null
+          : Math.round(Number(result.hoursBeforeStart)),
+    },
   };
 }
 

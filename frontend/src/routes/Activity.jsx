@@ -125,7 +125,7 @@ function Upcoming({ items, awaitingConfirmation, status, onReload }) {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {items.map((opportunity) => (
             <div key={opportunity.id}>
-              <OpportunityCard opportunity={opportunity} />
+              <OpportunityCard opportunity={opportunity} source="activity_upcoming" />
               <div className="mt-2 flex flex-wrap items-center gap-3">
                 <CompleteAction opportunity={opportunity} onCompleted={onReload} />
                 {/* Upcoming already has an action area, so Leave belongs
@@ -237,6 +237,7 @@ function Saved({ items, status, onReload, onUnsaved }) {
         <OpportunityCard
           key={opportunity.id}
           opportunity={opportunity}
+          source="activity_saved"
           onSaveChange={(saved) => {
             if (!saved) onUnsaved(opportunity.id);
           }}

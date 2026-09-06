@@ -15,6 +15,7 @@ import Button from '../components/ui/Button';
 import { CAUSES } from '../lib/causes';
 import { FILTER_KEYS, activeFilterCount, labelFor } from '../lib/filters';
 import { entrance, entranceInView, staggerDelay, TRANSITION } from '../lib/motion';
+import { trackDiscoverViewed } from '../lib/analytics';
 
 const PAGE_SIZE = 12;
 
@@ -124,7 +125,7 @@ function CardGrid({ children, className = '' }) {
 function EnteringCard({ opportunity, index, reduced }) {
   return (
     <motion.div {...entranceInView(reduced, { y: 10, delay: staggerDelay(index, reduced) })}>
-      <OpportunityCard opportunity={opportunity} />
+      <OpportunityCard opportunity={opportunity} source="discover" />
     </motion.div>
   );
 }
@@ -219,7 +220,7 @@ function FundraiserSection({ reduced }) {
             key={fundraiser.id}
             {...entranceInView(reduced, { y: 10, delay: staggerDelay(index, reduced) })}
           >
-            <FundraiserCard fundraiser={fundraiser} />
+            <FundraiserCard fundraiser={fundraiser} source="discover" />
           </motion.div>
         ))}
       </CardGrid>
@@ -393,6 +394,18 @@ function Results({ params, values, q, onClear, reduced }) {
 
 function Discover() {
   const { values, q, count, toggle, setQuery, clear, searchParams } = useFilterState();
+
+  /*
+   * One event per visit to Discover, reporting whether the visitor is
+   * browsing the curated view or has an intentional query running. It
+   * deliberately does not re-fire on every keystroke — `browsing` only flips
+   * when they move between the two modes, which is the distinction worth
+   * measuring. The query text itself is never sent.
+   */
+  const browsingMode = q || count > 0 ? (q ? 'search' : 'filter') : 'browse';
+  useEffect(() => {
+    trackDiscoverViewed(browsingMode);
+  }, [browsingMode]);
   const browsing = count === 0;
   const reduced = useReducedMotion();
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, BadgeCheck } from 'lucide-react';
 import PageContainer from '../components/layout/PageContainer';
 import Photo from '../components/ui/Photo';
@@ -14,6 +14,7 @@ import { FundraiserDemoNotice } from '../components/demo/DemoNotice';
 import { fetchFundraiser } from '../api/client';
 import { fundraiserImage, avatarImage } from '../lib/media';
 import { causeColor } from '../lib/causes';
+import { resolveSource, trackFundraiserViewed } from '../lib/analytics';
 
 /*
  * A fundraiser is Kynd's third core object: something someone can support.
@@ -64,6 +65,7 @@ function Creator({ creator, causeName }) {
 
 function FundraiserDetail() {
   const { id } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const [state, setState] = useState({ status: 'loading', fundraiser: null });
 
@@ -72,7 +74,10 @@ function FundraiserDetail() {
     setState({ status: 'loading', fundraiser: null });
 
     fetchFundraiser(id, { signal: controller.signal })
-      .then((body) => setState({ status: 'ready', fundraiser: body.fundraiser }))
+      .then((body) => {
+        setState({ status: 'ready', fundraiser: body.fundraiser });
+        trackFundraiserViewed(body.fundraiser, resolveSource(location.state));
+      })
       .catch((err) => {
         if (err.name === 'AbortError') return;
         setState({ status: err.status === 404 ? 'not-found' : 'error', fundraiser: null });

@@ -2,6 +2,7 @@
 
 const express = require('express');
 const homeService = require('../services/home');
+const { track, contextFrom } = require('../lib/analytics');
 const { requireDemoSession } = require('../middleware/session');
 
 const router = express.Router();
@@ -18,6 +19,19 @@ router.get('/', requireDemoSession(), async (req, res, next) => {
       sessionId: req.demo.sessionId,
       userId: req.demo.user.id,
     });
+
+    // has_second_degree tracks whether the "my community's community"
+    // mechanism actually produced anything for this visitor — the feature
+    // is only worth its slot if it fills reliably.
+    track(
+      'home_viewed',
+      {
+        item_count: items.length,
+        has_second_degree: items.some((item) => item.family === 'secondDegree'),
+      },
+      contextFrom(req.demo)
+    );
+
     res.json({ items });
   } catch (err) {
     next(err);
